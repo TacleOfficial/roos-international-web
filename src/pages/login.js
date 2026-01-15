@@ -48,6 +48,7 @@
         //window.Roos.auth.redirectTo(DASHBOARD_URL);
         setTimeout(() => window.Roos.auth.redirectTo(DASHBOARD_URL), 550);
       } catch (err) {
+        console.log("AUTH ERROR CODE:", err?.code, "FULL:", err);
         setAuthState(root, "error", friendlyAuthError(err, "login"));
       }
     }
