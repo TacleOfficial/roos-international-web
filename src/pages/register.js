@@ -32,6 +32,7 @@
   
     // Wait for Firebase to be ready before wiring handlers
     function init() {
+      window.Roos.guards.redirectIfAuthed();
       setAuthState(root, "idle");
       const btn = root.querySelector('[data-auth-action="register"]');
       if (btn) btn.addEventListener("click", (e) => { e.preventDefault(); handleRegister(); });

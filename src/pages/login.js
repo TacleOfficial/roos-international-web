@@ -31,6 +31,7 @@
     }
   
     function init() {
+      window.Roos.guards.redirectIfAuthed();
       setAuthState(root, "idle");
       const btn = root.querySelector('[data-auth-action="login"]');
       if (btn) btn.addEventListener("click", (e) => { e.preventDefault(); handleLogin(); });

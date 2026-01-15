@@ -18,10 +18,13 @@
   
         // TODO: replace with your Firebase web config (safe to be public)
         const firebaseConfig = {
-          apiKey: "YOUR_API_KEY",
-          authDomain: "YOUR_PROJECT.firebaseapp.com",
-          projectId: "YOUR_PROJECT_ID",
-          appId: "YOUR_APP_ID",
+          apiKey: "AIzaSyAk2WSfWDBp_q-ZVeSPM65s54nMFaO2njA",
+          authDomain: "roos-international-2026.firebaseapp.com",
+          projectId: "roos-international-2026",
+          storageBucket: "roos-international-2026.firebasestorage.app",
+          messagingSenderId: "1008243111132",
+          appId: "1:1008243111132:web:009d2d4b8f6ee03a30b019",
+          measurementId: "G-925BJQ3YQB"
         };
   
         const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
