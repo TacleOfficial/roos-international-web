@@ -43,7 +43,8 @@
   
           await window.Roos.auth.register(email, password);
           setAuthState(root, "success", "Account created! Redirecting…");
-          window.Roos.auth.redirectTo(DASHBOARD_URL);
+          //window.Roos.auth.redirectTo(DASHBOARD_URL);
+          setTimeout(() => window.Roos.auth.redirectTo(DASHBOARD_URL), 550);
         } catch (err) {
           setAuthState(root, "error", friendlyAuthError(err));
         }
