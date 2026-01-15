@@ -8,6 +8,14 @@
       if (!fb || !fb.auth || !fb.authMod) throw new Error("Firebase not ready");
       return fb;
     }
+
+    async function sendPasswordReset(email) {
+      const fb = requireFirebase();
+      const { sendPasswordResetEmail } = fb.authMod;
+      await sendPasswordResetEmail(fb.auth, email);
+      return true;
+    }
+    
   
     async function register(email, password) {
       const fb = requireFirebase();
@@ -39,6 +47,6 @@
       window.location.assign(url);
     }
   
-    window.Roos.auth = { register, login, logout, onAuthStateChanged, redirectTo };
+    window.Roos.auth = { register, login, logout, onAuthStateChanged, redirectTo, sendPasswordReset };
   })();
   

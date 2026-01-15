@@ -23,7 +23,9 @@
     // Wait until firebase is initialized
     await waitFor(() => window.Roos && window.Roos.firebase && window.Roos.firebase._initialized, "roos:firebase-ready");
 
-    const { setAuthState, friendlyAuthError } = window.Roos.ui;
+    const { setAuthState, friendlyAuthError, bindBackToIdle  } = window.Roos.ui;
+    bindBackToIdle(root);
+
 
     function getVal(name) {
       const el = root.querySelector(`[data-auth-input="${name}"]`);
@@ -46,9 +48,28 @@
         //window.Roos.auth.redirectTo(DASHBOARD_URL);
         setTimeout(() => window.Roos.auth.redirectTo(DASHBOARD_URL), 550);
       } catch (err) {
-        setAuthState(root, "error", friendlyAuthError(err));
+        setAuthState(root, "error", friendlyAuthError(err, "login"));
       }
     }
+
+    async function handleForgotPassword() {
+      try {
+        setAuthState(root, "loading");
+        const email = getVal("email");
+    
+        if (!email) {
+          setAuthState(root, "error", "Enter your email above, then click “Reset Password”.");
+          return;
+        }
+    
+        await window.Roos.auth.sendPasswordReset(email);
+        setAuthState(root, "success", "Password reset email sent. Check your inbox.");
+        // No redirect here (user stays on login)
+      } catch (err) {
+        setAuthState(root, "error", friendlyAuthError(err, "reset"));
+      }
+    }
+    
 
     // If already logged in, go to dashboard
     if (window.Roos.guards && window.Roos.guards.redirectIfAuthed) {
@@ -58,6 +79,9 @@
     setAuthState(root, "idle");
     const btn = root.querySelector('[data-auth-action="login"]');
     if (btn) btn.addEventListener("click", (e) => { e.preventDefault(); handleLogin(); });
+    const forgotBtn = root.querySelector('[data-auth-action="forgot-password"]');
+    if (forgotBtn) forgotBtn.addEventListener("click", (e) => { e.preventDefault(); handleForgotPassword(); });
+
   }
 
   boot().catch((e) => console.error("login boot failed:", e));

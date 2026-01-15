@@ -23,7 +23,8 @@
       // Wait until firebase is initialized
       await waitFor(() => window.Roos && window.Roos.firebase && window.Roos.firebase._initialized, "roos:firebase-ready");
   
-      const { setAuthState, friendlyAuthError } = window.Roos.ui;
+      const { setAuthState, friendlyAuthError, bindBacktoIdle } = window.Roos.ui;
+      bindBackToIdle(root);
   
       function getVal(name) {
         const el = root.querySelector(`[data-auth-input="${name}"]`);
@@ -46,7 +47,7 @@
           //window.Roos.auth.redirectTo(DASHBOARD_URL);
           setTimeout(() => window.Roos.auth.redirectTo(DASHBOARD_URL), 550);
         } catch (err) {
-          setAuthState(root, "error", friendlyAuthError(err));
+          setAuthState(root, "error", friendlyAuthError(err, "register"));
         }
       }
   
