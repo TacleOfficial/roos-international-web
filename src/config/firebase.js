@@ -39,6 +39,8 @@
   
         window.Roos.firebase._initialized = true;
         window.dispatchEvent(new CustomEvent("roos:firebase-ready"));
+        console.log("[Roos] Firebase ready ✅");
+
       })
       .catch((err) => {
         console.error("Firebase init error:", err);
