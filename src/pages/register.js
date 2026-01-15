@@ -4,41 +4,60 @@
     const root = document.querySelector('[data-auth-root="register"]');
     if (!root) return;
   
-    const { setAuthState, friendlyAuthError } = window.Roos.ui;
-  
-    function getVal(name) {
-      const el = root.querySelector(`[data-auth-input="${name}"]`);
-      return el ? String(el.value || "").trim() : "";
+    function waitFor(conditionFn, eventName) {
+      return new Promise((resolve) => {
+        if (conditionFn()) return resolve();
+        const onReady = () => {
+          if (conditionFn()) {
+            window.removeEventListener(eventName, onReady);
+            resolve();
+          }
+        };
+        window.addEventListener(eventName, onReady);
+      });
     }
   
-    async function handleRegister() {
-      try {
-        setAuthState(root, "loading");
-        const email = getVal("email");
-        const password = getVal("password");
+    async function boot() {
+      // Wait until global scripts (ui/auth) are ready
+      await waitFor(() => window.Roos && window.Roos.ui && window.Roos.auth, "roos:global-ready");
+      // Wait until firebase is initialized
+      await waitFor(() => window.Roos && window.Roos.firebase && window.Roos.firebase._initialized, "roos:firebase-ready");
   
-        if (!email || !password) {
-          setAuthState(root, "error", "Email and password are required.");
-          return;
-        }
+      const { setAuthState, friendlyAuthError } = window.Roos.ui;
   
-        await window.Roos.auth.register(email, password);
-        setAuthState(root, "success", "Account created! Redirecting…");
-        window.Roos.auth.redirectTo(DASHBOARD_URL);
-      } catch (err) {
-        setAuthState(root, "error", friendlyAuthError(err));
+      function getVal(name) {
+        const el = root.querySelector(`[data-auth-input="${name}"]`);
+        return el ? String(el.value || "").trim() : "";
       }
-    }
   
-    // Wait for Firebase to be ready before wiring handlers
-    function init() {
-      window.Roos.guards.redirectIfAuthed();
+      async function handleRegister() {
+        try {
+          setAuthState(root, "loading");
+          const email = getVal("email");
+          const password = getVal("password");
+  
+          if (!email || !password) {
+            setAuthState(root, "error", "Email and password are required.");
+            return;
+          }
+  
+          await window.Roos.auth.register(email, password);
+          setAuthState(root, "success", "Account created! Redirecting…");
+          window.Roos.auth.redirectTo(DASHBOARD_URL);
+        } catch (err) {
+          setAuthState(root, "error", friendlyAuthError(err));
+        }
+      }
+  
+      // If already logged in, go to dashboard
+      if (window.Roos.guards && window.Roos.guards.redirectIfAuthed) {
+        window.Roos.guards.redirectIfAuthed();
+      }
+  
       setAuthState(root, "idle");
       const btn = root.querySelector('[data-auth-action="register"]');
       if (btn) btn.addEventListener("click", (e) => { e.preventDefault(); handleRegister(); });
     }
   
-    if (window.Roos?.firebase?._initialized) init();
-    else window.addEventListener("roos:firebase-ready", init, { once: true });
+    boot().catch((e) => console.error("register boot failed:", e));
   })();
-  
