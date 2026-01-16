@@ -3,34 +3,25 @@
   window.Roos = window.Roos || {};
   window.Roos.ui = window.Roos.ui || {};
 
-function setVisible(el, yes) {
-  if (!el) return;
+  function setVisible(el, yes) {
+    if (!el) return;
 
-  // Your Webflow combo class that hides the admin tab:
-  // <a class="... hide w-inline-block w-tab-link" ...>
-  if (yes) el.classList.remove("hide");
-  else el.classList.add("hide");
+    // Your Webflow combo class that hides the admin tab link
+    if (yes) el.classList.remove("hide");
+    else el.classList.add("hide");
 
-  // Force visibility inline with !important (beats CSS rules)
-  if (yes) {
-    // Webflow tab links are inline-block (w-inline-block)
-    el.style.setProperty("display", "inline-block", "important");
-    el.style.setProperty("visibility", "visible", "important");
-    el.style.setProperty("pointer-events", "auto", "important");
-    el.style.setProperty("opacity", "1", "important");
-  } else {
-    el.style.setProperty("display", "none", "important");
+    // Force visibility with inline !important (wins over CSS rules)
+    if (yes) {
+      // Webflow tab links are inline-block (w-inline-block)
+      el.style.setProperty("display", "inline-block", "important");
+      el.style.setProperty("visibility", "visible", "important");
+      el.style.setProperty("pointer-events", "auto", "important");
+      el.style.setProperty("opacity", "1", "important");
+    } else {
+      el.style.setProperty("display", "none", "important");
+    }
   }
-}
 
-
-
-
-  /**
-   * Apply role-based visibility across the page.
-   * - data-role="admin"      → admin-only elements (including tab links)
-   * - data-role-pane="admin" → optional tab panes
-   */
   function applyRoleVisibility(roles) {
     const r = Array.isArray(roles) ? roles : [];
     const isAdmin = r.includes("admin");
@@ -52,8 +43,10 @@ function setVisible(el, yes) {
 
     if (activeAdminTab && !isAdmin) {
       const tabMenu = activeAdminTab.closest(".w-tab-menu") || document;
+
+      // Pick the first tab link that is not hidden
       const fallback = Array.from(tabMenu.querySelectorAll(".w-tab-link"))
-        .find((el) => el.style.display !== "none");
+        .find((el) => getComputedStyle(el).display !== "none");
 
       if (fallback) fallback.click();
     }
