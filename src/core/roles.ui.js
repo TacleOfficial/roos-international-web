@@ -3,10 +3,20 @@
   window.Roos = window.Roos || {};
   window.Roos.ui = window.Roos.ui || {};
 
-  function setVisible(el, yes) {
-    if (!el) return;
-    el.style.display = yes ? "" : "none";
+function setVisible(el, yes) {
+  if (!el) return;
+
+  // If you hid things with a class (like "hide"), remove/add it here
+  var hideClass = el.getAttribute("data-role-hide-class");
+  if (hideClass) {
+    if (yes) el.classList.remove(hideClass);
+    else el.classList.add(hideClass);
   }
+
+  // Also set inline display as a fallback override
+  el.style.display = yes ? "" : "none";
+}
+
 
   /**
    * Apply role-based visibility across the page.
