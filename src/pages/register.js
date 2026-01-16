@@ -23,7 +23,7 @@
       // Wait until firebase is initialized
       await waitFor(() => window.Roos && window.Roos.firebase && window.Roos.firebase._initialized, "roos:firebase-ready");
   
-      const { setAuthState, friendlyAuthError, bindBacktoIdle } = window.Roos.ui;
+      const { setAuthState, friendlyAuthError, bindBackToIdle } = window.Roos.ui;
       bindBackToIdle(root);
   
       function getVal(name) {
