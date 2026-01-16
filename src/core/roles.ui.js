@@ -6,14 +6,14 @@
 function setVisible(el, yes) {
   if (!el) return;
 
-  // Always remove Webflow combo "hide" if showing
-  // (you can keep using the Designer to hide by default)
+  // Your Webflow combo class that hides the admin tab:
+  // <a class="... hide w-inline-block w-tab-link" ...>
   if (yes) el.classList.remove("hide");
   else el.classList.add("hide");
 
-  // Force visibility with inline !important (beats stylesheet rules)
+  // Force visibility inline with !important (beats CSS rules)
   if (yes) {
-    // Tab links should be inline-block (matches Webflow tabs)
+    // Webflow tab links are inline-block (w-inline-block)
     el.style.setProperty("display", "inline-block", "important");
     el.style.setProperty("visibility", "visible", "important");
     el.style.setProperty("pointer-events", "auto", "important");
@@ -22,6 +22,7 @@ function setVisible(el, yes) {
     el.style.setProperty("display", "none", "important");
   }
 }
+
 
 
 
