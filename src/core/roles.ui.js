@@ -23,7 +23,7 @@
 
     // Force correct display type with !important
     if (isTabLink(el)) {
-      el.style.setProperty("display", "inline-block", "important");
+      el.style.setProperty("display", "flex", "important");
     } else if (isTabPane(el)) {
       el.style.setProperty("display", "block", "important");
     } else {
