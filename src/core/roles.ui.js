@@ -3,55 +3,96 @@
   window.Roos = window.Roos || {};
   window.Roos.ui = window.Roos.ui || {};
 
-  function setVisible(el, yes) {
-    if (!el) return;
-
-    // Your Webflow combo class that hides the admin tab link
-    if (yes) el.classList.remove("hide");
-    else el.classList.add("hide");
-
-    // Force visibility with inline !important (wins over CSS rules)
-    if (yes) {
-      // Webflow tab links are inline-block (w-inline-block)
-      el.style.setProperty("display", "inline-block", "important");
-      el.style.setProperty("visibility", "visible", "important");
-      el.style.setProperty("pointer-events", "auto", "important");
-      el.style.setProperty("opacity", "1", "important");
-    } else {
-      el.style.setProperty("display", "none", "important");
-    }
+  function getHideClass(el) {
+    return el.getAttribute("data-role-hide-class") || "hide";
   }
 
-  function applyRoleVisibility(roles) {
-    const r = Array.isArray(roles) ? roles : [];
-    const isAdmin = r.includes("admin");
+  function isTabLink(el) {
+    return el.classList && el.classList.contains("w-tab-link");
+  }
 
-    // Admin-only elements (tab links, sections, buttons)
-    document.querySelectorAll('[data-role="admin"]').forEach((el) => {
-      setVisible(el, isAdmin);
-    });
+  function isTabPane(el) {
+    return el.classList && el.classList.contains("w-tab-pane");
+  }
 
-    // Optional: admin-only tab panes
-    document.querySelectorAll('[data-role-pane="admin"]').forEach((el) => {
-      setVisible(el, isAdmin);
-    });
+  function show(el) {
+    if (!el) return;
 
-    // Prevent Webflow Tabs from staying on a hidden admin tab
+    const hideClass = getHideClass(el);
+    el.classList.remove(hideClass);
+
+    // Force correct display type with !important
+    if (isTabLink(el)) {
+      el.style.setProperty("display", "inline-block", "important");
+    } else if (isTabPane(el)) {
+      el.style.setProperty("display", "block", "important");
+    } else {
+      el.style.setProperty("display", "", "important");
+    }
+
+    el.style.setProperty("visibility", "visible", "important");
+    el.style.setProperty("pointer-events", "auto", "important");
+    el.style.setProperty("opacity", "1", "important");
+  }
+
+  function hide(el) {
+    if (!el) return;
+
+    const hideClass = getHideClass(el);
+    el.classList.add(hideClass);
+
+    el.style.setProperty("display", "none", "important");
+    el.style.removeProperty("visibility");
+    el.style.removeProperty("pointer-events");
+    el.style.removeProperty("opacity");
+  }
+
+  function ensureValidTab() {
     const activeAdminTab = document.querySelector(
       '.w-tab-link.w--current[data-role="admin"]'
     );
+    if (!activeAdminTab) return;
 
-    if (activeAdminTab && !isAdmin) {
-      const tabMenu = activeAdminTab.closest(".w-tab-menu") || document;
+    const tabMenu = activeAdminTab.closest(".w-tab-menu") || document;
+    const fallback = Array.from(tabMenu.querySelectorAll(".w-tab-link"))
+      .find((el) => getComputedStyle(el).display !== "none");
 
-      // Pick the first tab link that is not hidden
-      const fallback = Array.from(tabMenu.querySelectorAll(".w-tab-link"))
-        .find((el) => getComputedStyle(el).display !== "none");
+    if (fallback) fallback.click();
+  }
 
-      if (fallback) fallback.click();
+  function applyOnce(roles) {
+    const r = Array.isArray(roles) ? roles : [];
+    const isAdmin = r.includes("admin");
+
+    document.querySelectorAll('[data-role="admin"]').forEach((el) => {
+      if (isAdmin) show(el);
+      else hide(el);
+    });
+
+    document.querySelectorAll('[data-role-pane="admin"]').forEach((el) => {
+      if (isAdmin) show(el);
+      else hide(el);
+    });
+
+    if (!isAdmin) ensureValidTab();
+    return { isAdmin };
+  }
+
+  function applyRoleVisibility(roles) {
+    const result = applyOnce(roles);
+
+    // Re-apply after Webflow initializes components (Tabs can mutate DOM state)
+    if (window.Webflow && Array.isArray(window.Webflow)) {
+      window.Webflow.push(function () {
+        applyOnce(roles);
+      });
     }
 
-    return { isAdmin };
+    // Re-apply again after short delays (covers late mutations)
+    setTimeout(function () { applyOnce(roles); }, 50);
+    setTimeout(function () { applyOnce(roles); }, 250);
+
+    return result;
   }
 
   window.Roos.ui.applyRoleVisibility = applyRoleVisibility;
