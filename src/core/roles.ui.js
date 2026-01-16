@@ -15,37 +15,45 @@
     return el.classList && el.classList.contains("w-tab-pane");
   }
 
-  function show(el) {
-    if (!el) return;
+function show(el) {
+  if (!el) return;
 
-    const hideClass = getHideClass(el);
-    el.classList.remove(hideClass);
+  const hideClass = getHideClass(el);
+  el.classList.remove(hideClass);
 
-    // Force correct display type with !important
-    if (isTabLink(el)) {
-      el.style.setProperty("display", "flex", "important");
-    } else if (isTabPane(el)) {
-      el.style.setProperty("display", "block", "important");
-    } else {
-      el.style.setProperty("display", "", "important");
-    }
-
+  // For TAB LINKS: force visible
+  if (isTabLink(el)) {
+    el.style.setProperty("display", "flex", "important");
     el.style.setProperty("visibility", "visible", "important");
     el.style.setProperty("pointer-events", "auto", "important");
     el.style.setProperty("opacity", "1", "important");
+    return;
   }
 
-  function hide(el) {
-    if (!el) return;
-
-    const hideClass = getHideClass(el);
-    el.classList.add(hideClass);
-
-    el.style.setProperty("display", "none", "important");
+  // For TAB PANES: DO NOT force display:block
+  // Let Webflow control active/inactive panes.
+  if (isTabPane(el)) {
+    el.style.removeProperty("display");
     el.style.removeProperty("visibility");
     el.style.removeProperty("pointer-events");
     el.style.removeProperty("opacity");
+    return;
   }
+
+  // For normal elements (optional)
+  el.style.removeProperty("display");
+}
+
+
+function hide(el) {
+  if (!el) return;
+
+  const hideClass = getHideClass(el);
+  el.classList.add(hideClass);
+
+  // Always force hidden when not allowed
+  el.style.setProperty("display", "none", "important");
+}
 
   function ensureValidTab() {
     const activeAdminTab = document.querySelector(
