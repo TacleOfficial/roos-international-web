@@ -6,16 +6,23 @@
 function setVisible(el, yes) {
   if (!el) return;
 
-  // If you hid things with a class (like "hide"), remove/add it here
-  var hideClass = el.getAttribute("data-role-hide-class");
-  if (hideClass) {
-    if (yes) el.classList.remove(hideClass);
-    else el.classList.add(hideClass);
-  }
+  // Always remove Webflow combo "hide" if showing
+  // (you can keep using the Designer to hide by default)
+  if (yes) el.classList.remove("hide");
+  else el.classList.add("hide");
 
-  // Also set inline display as a fallback override
-  el.style.display = yes ? "" : "none";
+  // Force visibility with inline !important (beats stylesheet rules)
+  if (yes) {
+    // Tab links should be inline-block (matches Webflow tabs)
+    el.style.setProperty("display", "inline-block", "important");
+    el.style.setProperty("visibility", "visible", "important");
+    el.style.setProperty("pointer-events", "auto", "important");
+    el.style.setProperty("opacity", "1", "important");
+  } else {
+    el.style.setProperty("display", "none", "important");
+  }
 }
+
 
 
   /**
