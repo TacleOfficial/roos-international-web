@@ -8,6 +8,42 @@
     el.textContent = value == null ? "" : String(value);
   }
 
+  // Loads admin-only logic (Option B) only when user is admin/super_admin
+  function loadAdminModule(me) {
+    window.Roos = window.Roos || {};
+    if (window.Roos._adminModuleLoaded) return;
+    window.Roos._adminModuleLoaded = true;
+
+    const ref = window.Roos._ref || "main";
+    const env = window.Roos._env || "prod";
+    const cache = env === "dev" ? ("?v=" + Date.now()) : "";
+
+    const src =
+      "https://cdn.jsdelivr.net/gh/TacleOfficial/roos-international-web@" +
+      ref +
+      "/src/pages/dashboard.admin.js" +
+      cache;
+
+    const s = document.createElement("script");
+    s.src = src;
+    s.defer = true;
+
+    s.onload = function () {
+      // dashboard.admin.js should expose: window.Roos.admin.init({ me, root })
+      if (window.Roos?.admin?.init) {
+        window.Roos.admin.init({ me, root: root || document });
+      } else {
+        console.warn("dashboard.admin.js loaded but window.Roos.admin.init was not found");
+      }
+    };
+
+    s.onerror = function (e) {
+      console.error("Failed to load dashboard.admin.js:", src, e);
+    };
+
+    document.head.appendChild(s);
+  }
+
   async function init() {
     // 1) Protect this page
     const user = await window.Roos.guards.requireAuth();
@@ -25,8 +61,7 @@
       console.error("Failed to load /me:", err);
     }
 
-    // ✅ STEP 3: Apply role-based visibility (admin tabs/sections)
-    // This will hide/show [data-role="admin"] and handle Webflow tab fallback.
+    // 3) Apply role-based visibility (admin tabs/sections)
     if (me && window.Roos?.ui?.applyRoleVisibility) {
       window.Roos.ui.applyRoleVisibility(me.roles);
     } else if (me && !window.Roos?.ui?.applyRoleVisibility) {
@@ -38,10 +73,15 @@
     setText($('[data-auth="uid"]', root || document), user.uid);
 
     // 5) Bind server-verified data if available
+    const roles = Array.isArray(me?.roles) ? me.roles : [];
     if (me) {
       setText($('[data-auth="serverEmail"]', root || document), me.email);
-      setText($('[data-auth="roles"]', root || document), Array.isArray(me.roles) ? me.roles.join(", ") : "");
+      setText($('[data-auth="roles"]', root || document), roles.join(", "));
     }
+
+    // ✅ Admin-only module load (Option B)
+    const isAdmin = roles.includes("admin") || roles.includes("super_admin");
+    if (me && isAdmin) loadAdminModule(me);
 
     // 6) Logout button hook
     const logoutBtn = document.querySelector('[data-auth-action="logout"]');
