@@ -258,6 +258,231 @@
     };
   }
 
+  function buildRolesManager(rootEl) {
+  const uiRoot = rootEl.querySelector('[data-admin-roles="root"]');
+  if (!uiRoot) {
+    console.warn('[Roos][Admin] Missing [data-admin-roles="root"]');
+    return null;
+  }
+
+  const ui = {
+    root: uiRoot,
+    msg: uiRoot.querySelector('[data-admin-roles="msg"]'),
+    loading: uiRoot.querySelector('[data-admin-roles="loading"]'),
+    error: uiRoot.querySelector('[data-admin-roles="error"]'),
+
+    createRoleId: uiRoot.querySelector('[data-admin-roles-input="roleId"]'),
+    createName: uiRoot.querySelector('[data-admin-roles-input="name"]'),
+    createDesc: uiRoot.querySelector('[data-admin-roles-input="description"]'),
+    createBtn: uiRoot.querySelector('[data-admin-roles-action="create"]'),
+    createPerms: Array.from(uiRoot.querySelectorAll("[data-admin-roles-perm]")),
+
+    list: uiRoot.querySelector('[data-admin-roles="list"]'),
+    tpl: uiRoot.querySelector('[data-admin-roles="row-template"]'),
+  };
+
+  function show(el) { if (el) el.style.display = ""; }
+  function hide(el) { if (el) el.style.display = "none"; }
+  function setText(el, v) { if (el) el.textContent = v == null ? "" : String(v); }
+
+  async function api(path, opts) {
+    if (!window.Roos?.api?.request) throw new Error("api_not_ready");
+    return window.Roos.api.request(path, opts);
+  }
+
+  function setLoading(yes) {
+    if (yes) show(ui.loading); else hide(ui.loading);
+    if (yes) hide(ui.error);
+  }
+
+  function setError(msg) {
+    if (!ui.error) return;
+    setText(ui.error, msg);
+    show(ui.error);
+  }
+
+  function flashMsg(msg) {
+    if (!ui.msg) return;
+    setText(ui.msg, msg);
+    show(ui.msg);
+    setTimeout(() => hide(ui.msg), 2000);
+  }
+
+  function readPermCheckboxes(checkboxEls, attrName) {
+    const perms = {};
+    checkboxEls.forEach((cb) => {
+      const key = cb.getAttribute(attrName);
+      perms[key] = !!cb.checked;
+    });
+    return perms;
+  }
+
+  function applyPermCheckboxes(checkboxEls, attrName, perms) {
+    checkboxEls.forEach((cb) => {
+      const key = cb.getAttribute(attrName);
+      cb.checked = !!(perms && perms[key]);
+    });
+  }
+
+  function clearRows() {
+    if (!ui.list) return;
+    Array.from(ui.list.querySelectorAll('[data-admin-roles-row="item"]')).forEach((n) => n.remove());
+  }
+
+  function bindRow(row, role) {
+    const roleId = role.roleId;
+
+    setText(row.querySelector('[data-field="roleId"]'), roleId);
+    setText(row.querySelector('[data-field="name"]'), role.name || roleId);
+    setText(row.querySelector('[data-field="isSystem"]'), role.isSystem ? "Yes" : "No");
+
+    // Buttons
+    const editBtn = row.querySelector('[data-admin-roles-action="edit"]');
+    const delBtn = row.querySelector('[data-admin-roles-action="delete"]');
+
+    // Editor
+    const editor = row.querySelector('[data-admin-roles="editor"]');
+    const editName = row.querySelector('[data-admin-roles-edit="name"]');
+    const editDesc = row.querySelector('[data-admin-roles-edit="description"]');
+    const editPerms = Array.from(row.querySelectorAll("[data-admin-roles-edit-perm]"));
+
+    const saveBtn = row.querySelector('[data-admin-roles-action="save"]');
+    const cancelBtn = row.querySelector('[data-admin-roles-action="cancel"]');
+
+    function openEditor() {
+      if (!editor) return;
+      if (editName) editName.value = role.name || "";
+      if (editDesc) editDesc.value = role.description || "";
+      applyPermCheckboxes(editPerms, "data-admin-roles-edit-perm", role.permissions || {});
+      show(editor);
+    }
+
+    function closeEditor() {
+      if (!editor) return;
+      hide(editor);
+    }
+
+    async function saveEdits() {
+      try {
+        setLoading(true);
+        const patch = {
+          name: editName ? String(editName.value || "").trim() : "",
+          description: editDesc ? String(editDesc.value || "").trim() : "",
+          permissions: readPermCheckboxes(editPerms, "data-admin-roles-edit-perm"),
+        };
+
+        await api(`/admin/roles/${encodeURIComponent(roleId)}`, {
+          method: "PATCH",
+          body: patch,
+        });
+
+        flashMsg("Role updated.");
+        await refresh();
+      } catch (e) {
+        console.error(e);
+        setError("Unable to update role.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function deleteRole() {
+      if (role.isSystem) {
+        flashMsg("System roles cannot be deleted.");
+        return;
+      }
+      const ok = window.confirm(`Delete role "${roleId}"? This cannot be undone.`);
+      if (!ok) return;
+
+      try {
+        setLoading(true);
+        await api(`/admin/roles/${encodeURIComponent(roleId)}`, { method: "DELETE" });
+        flashMsg("Role deleted.");
+        await refresh();
+      } catch (e) {
+        console.error(e);
+        // backend returns role_in_use, cannot_delete_system_role, etc.
+        setError("Unable to delete role (it may be in use).");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (editBtn) editBtn.addEventListener("click", (e) => { e.preventDefault(); openEditor(); });
+    if (cancelBtn) cancelBtn.addEventListener("click", (e) => { e.preventDefault(); closeEditor(); });
+    if (saveBtn) saveBtn.addEventListener("click", (e) => { e.preventDefault(); saveEdits(); });
+    if (delBtn) delBtn.addEventListener("click", (e) => { e.preventDefault(); deleteRole(); });
+  }
+
+  async function refresh() {
+    setLoading(true);
+    try {
+      const res = await api("/admin/roles");
+      const items = Array.isArray(res.items) ? res.items : [];
+
+      clearRows();
+      hide(ui.tpl);
+
+      items.forEach((r) => {
+        const row = ui.tpl.cloneNode(true);
+        row.setAttribute("data-admin-roles-row", "item");
+        row.removeAttribute("id");
+        row.style.display = "";
+        bindRow(row, r);
+        ui.list.appendChild(row);
+      });
+    } catch (e) {
+      console.error(e);
+      setError("Unable to load roles.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createRole() {
+    try {
+      setLoading(true);
+      const roleId = ui.createRoleId ? String(ui.createRoleId.value || "").trim() : "";
+      const name = ui.createName ? String(ui.createName.value || "").trim() : "";
+      const description = ui.createDesc ? String(ui.createDesc.value || "").trim() : "";
+      const permissions = readPermCheckboxes(ui.createPerms, "data-admin-roles-perm");
+
+      await api("/admin/roles", {
+        method: "POST",
+        body: { roleId, name, description, permissions },
+      });
+
+      flashMsg("Role created.");
+
+      // Clear form
+      if (ui.createRoleId) ui.createRoleId.value = "";
+      if (ui.createName) ui.createName.value = "";
+      if (ui.createDesc) ui.createDesc.value = "";
+      ui.createPerms.forEach((cb) => (cb.checked = false));
+
+      await refresh();
+    } catch (e) {
+      console.error(e);
+      setError("Unable to create role. Check Role ID and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (ui.createBtn) {
+    ui.createBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      createRole();
+    });
+  }
+
+  // initial load
+  refresh();
+
+  return { refresh };
+}
+
+
   // Called by dashboard.js after the script is loaded
   window.Roos.admin.init = function ({ me, root }) {
     try {
@@ -271,6 +496,9 @@
 
       const usersModule = buildUsersModule(rootEl);
       if (!usersModule) return;
+
+      buildRolesManager(rootEl);
+
 
       console.log("[Roos][Admin] dashboard.admin.js initialized ✅");
     } catch (e) {
