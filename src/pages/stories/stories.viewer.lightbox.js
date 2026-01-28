@@ -24,6 +24,9 @@
       const likeCountEl = lightboxEl.querySelector('[data-story-bind="likeCount"]');
 
       const commentsListEl = lightboxEl.querySelector('[data-story-bind="commentsList"]');
+      const commentsDrawerEl = lightboxEl.querySelector('[data-story-bind="commentsDrawer"]');
+      const toggleCommentsBtn = lightboxEl.querySelector('[data-story-action="toggleComments"]');
+
       const commentForm = lightboxEl.querySelector('form[data-story-comment-form]');
       const commentInput = lightboxEl.querySelector('input[data-story-comment-input]');
       const progressEl = lightboxEl.querySelector(".story-progress");
@@ -37,6 +40,9 @@
       let currentItemIndex = 0;
       let isPaused = false;
       let progressFills = []; // array of .story-progress-fill elements
+
+      if (commentsDrawerEl) commentsDrawerEl.style.display = "";
+
 
       const rail = window.Roos.storiesRail.initRail({
         root,
@@ -134,6 +140,12 @@
           }
         }
       });
+
+      toggleCommentsBtn?.addEventListener("click", () => {
+        if (!commentsDrawerEl) return;
+        commentsDrawerEl.classList.toggle("is-open");
+      });
+
 
       commentForm?.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -270,6 +282,7 @@
         }
         hide(lightboxEl);
         document.body.style.overflow = "";
+        commentsDrawerEl?.classList.remove("is-open");
         currentItems = [];
         currentItemIndex = 0;
         currentStoryIndex = -1;
