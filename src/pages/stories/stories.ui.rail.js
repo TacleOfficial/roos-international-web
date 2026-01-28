@@ -158,12 +158,24 @@ function renderCard(templateEl, story) {
         // remove old cards
         railEl.querySelectorAll('[data-story="card"]').forEach(n => n.remove());
 
+        // ✅ pull server-viewed ids (if signed in) and merge into local viewed map
+        try {
+          const ids = await window.Roos?.storiesData?.listMyViewedStoryIds?.(200);
+          if (Array.isArray(ids) && ids.length) {
+            // merge into localStorage map so renderCard() sees them as viewed too
+            const map = loadViewedMap();
+            ids.forEach((id) => { map[id] = map[id] || Date.now(); });
+            saveViewedMap(map);
+          }
+        } catch (_) {}
+
         const frag = document.createDocumentFragment();
         stories.forEach(story => frag.appendChild(renderCard(templateEl, story)));
         railEl.appendChild(frag);
 
         updateArrows(railEl, prevBtn, nextBtn);
       }
+
 
       window.Roos.storiesRail.markViewed = markStoryViewed;
 

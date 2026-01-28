@@ -27,6 +27,8 @@
       const commentForm = lightboxEl.querySelector('form[data-story-comment-form]');
       const commentInput = lightboxEl.querySelector('input[data-story-comment-input]');
       const progressEl = lightboxEl.querySelector(".story-progress");
+      const stageEl = lightboxEl.querySelector(".story-stage");
+
 
 
       let stories = [];
@@ -88,11 +90,18 @@
       });
 
 
-      videoEl?.addEventListener("ended", () => {
+      videoEl?.addEventListener("ended", async () => {
         setProgressState(currentItemIndex, 100);
-        if (currentItemIndex < currentItems.length - 1) playItem(currentItemIndex + 1);
-        else close(); // IG-ish: close after last clip (you can change to next story)
-      });
+
+        if (currentItemIndex < currentItems.length - 1) {
+          playItem(currentItemIndex + 1);
+          return;
+        }
+
+        // ✅ last clip ended → advance to next story (if any)
+        const ok = await openStoryByIndex(currentStoryIndex + 1);
+        if (!ok) close();
+      })
 
       prevItemBtn?.addEventListener("click", () => {
         if (!currentItems.length) return;
@@ -153,13 +162,14 @@
         currentStoryIndex = idx;
 
         // ✅ mark viewed (local)
-        try {
-          window.Roos?.storiesRail?.markViewed?.(storyId);
-        } catch (_) {}
+        try { window.Roos?.storiesRail?.markViewed?.(storyId); } catch (_) {}
+        try { await window.Roos?.storiesData?.markViewed?.(storyId); } catch (_) {}
 
         // re-render rail to apply is-viewed class immediately
+        // ✅ update this card immediately in the DOM so ring disappears now
         try {
-          await rail.setStories(stories);
+          const card = document.querySelector(`[data-story="card"][data-story-id="${storyId}"]`);
+          if (card) card.classList.add("is-viewed");
         } catch (_) {}
 
 
@@ -207,6 +217,15 @@
         const p = videoEl.play();
         if (p?.catch) p.catch(() => {});
       }
+
+      async function openStoryByIndex(nextIdx) {
+        if (nextIdx < 0 || nextIdx >= stories.length) return false;
+        const nextId = stories[nextIdx]?.id;
+        if (!nextId) return false;
+        await openStory(nextId);
+        return true;
+      }
+
 
       function buildProgress(count) {
         if (!progressEl) return;
@@ -272,6 +291,63 @@
 
         commentsListEl.appendChild(frag);
       }
+
+      (function bindSwipeGestures() {
+        if (!stageEl) return;
+
+        let startX = 0;
+        let startY = 0;
+        let tracking = false;
+
+        const THRESH_X = 40; // horizontal swipe threshold
+        const THRESH_Y = 60; // vertical swipe threshold
+
+        stageEl.addEventListener("touchstart", (e) => {
+          const t = e.touches && e.touches[0];
+          if (!t) return;
+          tracking = true;
+          startX = t.clientX;
+          startY = t.clientY;
+        }, { passive: true });
+
+        stageEl.addEventListener("touchmove", (e) => {
+          // prevent page from scrolling while swiping stories
+          if (!tracking) return;
+          e.preventDefault();
+        }, { passive: false });
+
+        stageEl.addEventListener("touchend", (e) => {
+          if (!tracking) return;
+          tracking = false;
+
+          const t = e.changedTouches && e.changedTouches[0];
+          if (!t) return;
+
+          const dx = t.clientX - startX;
+          const dy = t.clientY - startY;
+
+          const ax = Math.abs(dx);
+          const ay = Math.abs(dy);
+
+          // Vertical swipe (down = close)
+          if (ay > ax && dy > THRESH_Y) {
+            close();
+            return;
+          }
+
+          // Horizontal swipe (left/right = next/prev clip)
+          if (ax > ay && ax > THRESH_X) {
+            if (dx < 0) {
+              // left swipe → next clip
+              if (currentItems.length) playItem(currentItemIndex + 1);
+            } else {
+              // right swipe → prev clip
+              if (currentItems.length) playItem(currentItemIndex - 1);
+            }
+          }
+        }, { passive: true });
+      })();
+
 
       window.addEventListener("beforeunload", cleanup);
 

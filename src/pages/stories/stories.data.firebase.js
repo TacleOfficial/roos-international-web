@@ -134,6 +134,34 @@
     }
   }
 
+  async function markViewed(storyId) {
+    const fb = assertMods();
+    const user = getUser();
+    if (!user) return { persisted: false };
+
+    const { doc, setDoc, serverTimestamp } = fb.firestoreMod;
+
+    const ref = doc(fb.db, "users", user.uid, "storyViews", String(storyId));
+    await setDoc(ref, { viewedAt: serverTimestamp() }, { merge: false });
+
+    return { persisted: true };
+  }
+
+  async function listMyViewedStoryIds(limitN = 200) {
+    const fb = assertMods();
+    const user = getUser();
+    if (!user) return [];
+
+    const { collection, query, orderBy, limit, getDocs } = fb.firestoreMod;
+
+    const base = collection(fb.db, "users", user.uid, "storyViews");
+    const q = query(base, orderBy("viewedAt", "desc"), limit(limitN));
+    const snap = await getDocs(q);
+
+    return snap.docs.map(d => d.id); // docId == storyId
+  }
+
+
   window.Roos = window.Roos || {};
   window.Roos.storiesData = {
     listPublishedStories,
@@ -142,7 +170,9 @@
     listComments,
     addComment,
     getLikeState,
-    toggleLike
+    toggleLike,
+    markViewed,
+    listMyViewedStoryIds
   };
 
   log("Loaded ✅");
