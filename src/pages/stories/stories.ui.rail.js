@@ -34,7 +34,7 @@ function renderCard(templateEl, story) {
   const titleEl = card.querySelector('[data-story-bind="title"]');
   if (titleEl) titleEl.textContent = story.title || "";
 
-  // --- Cover image (default) ---
+  // still image
   const coverImg = card.querySelector('[data-story-bind="cover"]');
   if (coverImg && coverImg.tagName === "IMG") {
     coverImg.src = story.coverUrl || "";
@@ -43,61 +43,48 @@ function renderCard(templateEl, story) {
     coverImg.decoding = "async";
   }
 
-  // --- Hover preview video (optional) ---
+  // hover preview
   const wrap = card.querySelector('[data-story-bind="previewWrap"]');
   const vid  = card.querySelector('video[data-story-bind="previewVideo"]');
   const previewUrl = story.previewUrl || "";
 
-  // Only enable hover previews on devices that actually support hover
-  const canHover = window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const canHover = window.matchMedia &&
+    window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 
   if (canHover && wrap && vid && previewUrl) {
-    // Setup once
+    wrap.style.display = "none";
     vid.src = previewUrl;
     vid.muted = true;
     vid.loop = true;
     vid.playsInline = true;
-    vid.preload = "metadata"; // don’t download full file immediately
-
-    // Keep it hidden until hover
-    wrap.style.display = "none";
+    vid.preload = "metadata";
 
     let started = false;
 
-    const startPreview = () => {
+    const start = () => {
       wrap.style.display = "block";
-      // start playing on first hover (some browsers still might block; muted usually OK)
-      if (!started) {
-        started = true;
-        const p = vid.play();
-        if (p && p.catch) p.catch(() => {}); // ignore autoplay blocks
-      } else {
-        const p = vid.play();
-        if (p && p.catch) p.catch(() => {});
-      }
+      if (!started) started = true;
+      const p = vid.play();
+      if (p?.catch) p.catch(() => {});
     };
 
-    const stopPreview = () => {
-      // pause + reset to avoid continuing downloads
+    const stop = () => {
       try { vid.pause(); } catch (_) {}
       wrap.style.display = "none";
-      // Optional: reset time so it starts from beginning next hover
       try { vid.currentTime = 0; } catch (_) {}
     };
 
-    card.addEventListener("mouseenter", startPreview);
-    card.addEventListener("mouseleave", stopPreview);
-
-    // Safety: if user clicks while hovering, stop preview so it doesn't overlap with lightbox audio
-    card.addEventListener("click", stopPreview);
+    card.addEventListener("mouseenter", start);
+    card.addEventListener("mouseleave", stop);
+    card.addEventListener("click", stop); // prevent overlap when opening lightbox
   } else {
-    // No hover support or no previewUrl: ensure it's hidden
     if (wrap) wrap.style.display = "none";
     if (vid) vid.removeAttribute("src");
   }
 
   return card;
 }
+
 
 
   window.Roos = window.Roos || {};
