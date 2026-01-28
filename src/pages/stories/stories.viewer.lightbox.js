@@ -14,7 +14,8 @@
         return;
       }
 
-      const closeBtn = lightboxEl.querySelector('[data-story-action="close"]');
+      const closeEls = lightboxEl.querySelectorAll('[data-story-action="close"]');
+      closeEls.forEach((el) => el.addEventListener("click", close));
       const titleEl = lightboxEl.querySelector('[data-story-bind="title"]');
       const videoEl = lightboxEl.querySelector('video[data-story-player]');
       const prevItemBtn = lightboxEl.querySelector('[data-story-action="prevItem"]');
