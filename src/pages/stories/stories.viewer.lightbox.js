@@ -17,6 +17,8 @@
       const closeBtn = lightboxEl.querySelector('[data-story-action="close"]');
       const titleEl = lightboxEl.querySelector('[data-story-bind="title"]');
       const videoEl = lightboxEl.querySelector('video[data-story-player]');
+      const prevItemBtn = lightboxEl.querySelector('[data-story-action="prevItem"]');
+      const nextItemBtn = lightboxEl.querySelector('[data-story-action="nextItem"]');
       const likeBtn = lightboxEl.querySelector('[data-story-action="like"]');
       const likeCountEl = lightboxEl.querySelector('[data-story-bind="likeCount"]');
 
@@ -58,6 +60,17 @@
         if (currentItemIndex < currentItems.length - 1) playItem(currentItemIndex + 1);
         else close(); // IG-ish: close after last clip (you can change to next story)
       });
+
+      prevItemBtn?.addEventListener("click", () => {
+        if (!currentItems.length) return;
+        playItem(currentItemIndex - 1);
+      });
+
+      nextItemBtn?.addEventListener("click", () => {
+        if (!currentItems.length) return;
+        playItem(currentItemIndex + 1);
+      });
+
 
       likeBtn?.addEventListener("click", async () => {
         if (currentStoryIndex < 0) return;
@@ -118,6 +131,11 @@
         currentItems = await window.Roos.storiesData.listStoryItems(story.id);
         currentItemIndex = 0;
 
+        const hasMultiple = currentItems.length > 1;
+        if (prevItemBtn) prevItemBtn.style.display = hasMultiple ? "" : "none";
+        if (nextItemBtn) nextItemBtn.style.display = hasMultiple ? "" : "none";
+
+
         show(lightboxEl);
         document.body.style.overflow = "hidden";
 
@@ -127,9 +145,11 @@
 
       function playItem(i) {
         if (!videoEl || !currentItems.length) return;
-        currentItemIndex = Math.max(0, Math.min(i, currentItems.length - 1));
-        const item = currentItems[currentItemIndex];
 
+        const nextIndex = Math.max(0, Math.min(i, currentItems.length - 1));
+        currentItemIndex = nextIndex;
+
+        const item = currentItems[currentItemIndex];
         videoEl.src = item.videoUrl;
         videoEl.playsInline = true;
         videoEl.autoplay = true;
@@ -137,6 +157,7 @@
         const p = videoEl.play();
         if (p?.catch) p.catch(() => {});
       }
+
 
       function close() {
         if (videoEl) {
