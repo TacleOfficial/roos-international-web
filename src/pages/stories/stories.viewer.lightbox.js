@@ -56,7 +56,6 @@
         try { unsub?.(); } catch (_) {}
       }
 
-      closeBtn?.addEventListener("click", () => close());
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape" && lightboxEl.style.display !== "none") close();
       });
@@ -71,6 +70,11 @@
           isPaused = true;
         }
       });
+
+      videoEl?.addEventListener("loadedmetadata", () => {
+        setProgressState(currentItemIndex, 0);
+      });
+
 
       videoEl?.addEventListener("timeupdate", () => {
         if (!videoEl || !progressFills.length) return;
