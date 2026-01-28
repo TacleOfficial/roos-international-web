@@ -26,11 +26,15 @@
       const commentsListEl = lightboxEl.querySelector('[data-story-bind="commentsList"]');
       const commentForm = lightboxEl.querySelector('form[data-story-comment-form]');
       const commentInput = lightboxEl.querySelector('input[data-story-comment-input]');
+      const progressEl = lightboxEl.querySelector(".story-progress");
+
 
       let stories = [];
       let currentStoryIndex = -1;
       let currentItems = [];
       let currentItemIndex = 0;
+      let isPaused = false;
+      let progressFills = []; // array of .story-progress-fill elements
 
       const rail = window.Roos.storiesRail.initRail({
         root,
@@ -57,7 +61,31 @@
         if (e.key === "Escape" && lightboxEl.style.display !== "none") close();
       });
 
+
+      videoEl?.addEventListener("click", () => {
+        if (videoEl.paused) {
+          videoEl.play();
+          isPaused = false;
+        } else {
+          videoEl.pause();
+          isPaused = true;
+        }
+      });
+
+      videoEl?.addEventListener("timeupdate", () => {
+        if (!videoEl || !progressFills.length) return;
+        if (!currentItems.length || currentItemIndex < 0) return;
+
+        const dur = videoEl.duration;
+        if (!dur || !isFinite(dur) || dur <= 0) return;
+
+        const pct = (videoEl.currentTime / dur) * 100;
+        setProgressState(currentItemIndex, pct);
+      });
+
+
       videoEl?.addEventListener("ended", () => {
+        setProgressState(currentItemIndex, 100);
         if (currentItemIndex < currentItems.length - 1) playItem(currentItemIndex + 1);
         else close(); // IG-ish: close after last clip (you can change to next story)
       });
@@ -132,6 +160,9 @@
         currentItems = await window.Roos.storiesData.listStoryItems(story.id);
         currentItemIndex = 0;
 
+        buildProgress(currentItems.length);
+        setProgressState(0, 0);
+
         const hasMultiple = currentItems.length > 1;
         if (prevItemBtn) prevItemBtn.style.display = hasMultiple ? "" : "none";
         if (nextItemBtn) nextItemBtn.style.display = hasMultiple ? "" : "none";
@@ -154,9 +185,45 @@
         videoEl.src = item.videoUrl;
         videoEl.playsInline = true;
         videoEl.autoplay = true;
+        setProgressState(currentItemIndex, 0);
+
 
         const p = videoEl.play();
         if (p?.catch) p.catch(() => {});
+      }
+
+      function buildProgress(count) {
+        if (!progressEl) return;
+
+        progressEl.textContent = "";
+        progressFills = [];
+
+        const frag = document.createDocumentFragment();
+
+        for (let i = 0; i < count; i++) {
+          const seg = document.createElement("div");
+          seg.className = "story-progress-seg";
+
+          const fill = document.createElement("div");
+          fill.className = "story-progress-fill";
+          fill.style.width = "0%";
+
+          seg.appendChild(fill);
+          frag.appendChild(seg);
+          progressFills.push(fill);
+        }
+
+        progressEl.appendChild(frag);
+      }
+
+      function setProgressState(activeIndex, pct) {
+        if (!progressFills.length) return;
+
+        for (let i = 0; i < progressFills.length; i++) {
+          if (i < activeIndex) progressFills[i].style.width = "100%";
+          else if (i > activeIndex) progressFills[i].style.width = "0%";
+          else progressFills[i].style.width = `${Math.max(0, Math.min(100, pct))}%`;
+        }
       }
 
 
