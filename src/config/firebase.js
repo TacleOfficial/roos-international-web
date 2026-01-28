@@ -11,10 +11,14 @@
     Promise.all([
       import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js"),
       import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js"),
+      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js"),
+      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js"),
     ])
-      .then(([appMod, authMod]) => {
+      .then(([appMod, authMod, fsMod, stMod]) => {
         const { initializeApp, getApps } = appMod;
         const { getAuth, setPersistence, browserLocalPersistence } = authMod;
+        const { getFirestore } = fsMod;
+        const { getStorage } = stMod;
   
         // TODO: replace with your Firebase web config (safe to be public)
         const firebaseConfig = {
@@ -29,13 +33,21 @@
   
         const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
         const auth = getAuth(app);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
   
         // Persist session across tabs/reloads
         setPersistence(auth, browserLocalPersistence).catch(() => {});
   
         window.Roos.firebase.app = app;
         window.Roos.firebase.auth = auth;
+        window.Roos.firebase.db = db;
+        window.Roos.firebase.storage = storage;
+
+        // expose modules so other scripts don’t need to re-import
         window.Roos.firebase.authMod = authMod;
+        window.Roos.firebase.firestoreMod = fsMod;
+        window.Roos.firebase.storageMod = stMod;
   
         window.Roos.firebase._initialized = true;
         window.dispatchEvent(new CustomEvent("roos:firebase-ready"));
