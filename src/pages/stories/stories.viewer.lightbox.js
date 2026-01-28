@@ -152,6 +152,18 @@
         if (idx === -1) return;
         currentStoryIndex = idx;
 
+        // ✅ mark viewed (local)
+        try {
+          window.Roos?.storiesRail?.markViewed?.(storyId);
+        } catch (_) {}
+
+        // re-render rail to apply is-viewed class immediately
+        try {
+          await rail.setStories(stories);
+        } catch (_) {}
+
+
+
         const story = stories[currentStoryIndex];
         if (titleEl) titleEl.textContent = story.title || "";
         if (likeCountEl) likeCountEl.textContent = String(story.likeCount || 0);

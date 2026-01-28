@@ -2,6 +2,34 @@
 (function () {
   const log = (...a) => console.log("[Roos][Stories][Rail]", ...a);
 
+  const VIEWED_KEY = "roos_stories_viewed_v1";
+
+  function loadViewedMap() {
+    try {
+      return JSON.parse(localStorage.getItem(VIEWED_KEY) || "{}") || {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function saveViewedMap(map) {
+    try {
+      localStorage.setItem(VIEWED_KEY, JSON.stringify(map || {}));
+    } catch (_) {}
+  }
+
+  function isStoryViewed(storyId) {
+    const map = loadViewedMap();
+    return !!map[storyId];
+  }
+
+  function markStoryViewed(storyId) {
+    const map = loadViewedMap();
+    map[storyId] = Date.now();
+    saveViewedMap(map);
+  }
+
+
   function setDisabled(btn, disabled) {
     if (!btn) return;
     btn.disabled = !!disabled;
@@ -82,6 +110,10 @@ function renderCard(templateEl, story) {
     if (vid) vid.removeAttribute("src");
   }
 
+  // viewed state (client-side)
+  if (isStoryViewed(story.id)) card.classList.add("is-viewed");
+  else card.classList.remove("is-viewed");
+
   return card;
 }
 
@@ -132,6 +164,9 @@ function renderCard(templateEl, story) {
 
         updateArrows(railEl, prevBtn, nextBtn);
       }
+
+      window.Roos.storiesRail.markViewed = markStoryViewed;
+
 
       log("Ready ✅");
       return { setStories };
