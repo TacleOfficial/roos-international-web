@@ -146,8 +146,13 @@
 
       toggleCommentsBtn?.addEventListener("click", () => {
         if (!commentsDrawerEl) return;
-        commentsDrawerEl.classList.toggle("is-open");
+
+        const isOpen = commentsDrawerEl.classList.toggle("is-open");
+
+        // Force visibility regardless of Webflow inline styles
+        commentsDrawerEl.style.display = isOpen ? "block" : "none";
       });
+
 
 
       commentForm?.addEventListener("submit", async (e) => {
@@ -239,6 +244,12 @@
       const hasMultiple = currentItems.length > 1;
       if (prevItemBtn) prevItemBtn.style.display = hasMultiple ? "" : "none";
       if (nextItemBtn) nextItemBtn.style.display = hasMultiple ? "" : "none";
+
+      if (commentsDrawerEl) {
+        commentsDrawerEl.classList.remove("is-open");
+        commentsDrawerEl.style.display = "none";
+      }
+
 
       show(lightboxEl);
       document.body.style.overflow = "hidden";
@@ -341,12 +352,8 @@
         });
 
         commentsListEl.appendChild(frag);
-
-        // ❌ REMOVE these lines (server controls commentCount now)
-        // if (commentCountEl) commentCountEl.textContent = String(comments.length);
-        // const story = stories[currentStoryIndex];
-        // if (story) story.commentCount = comments.length;
       }
+
 
 
       (function bindSwipeGestures() {
