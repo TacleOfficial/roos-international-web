@@ -22,7 +22,7 @@
       const nextItemBtn = lightboxEl.querySelector('[data-story-action="nextItem"]');
       const likeBtn = lightboxEl.querySelector('[data-story-action="like"]');
       const likeCountEl = lightboxEl.querySelector('[data-story-bind="likeCount"]');
-
+      const commentCountEl = lightboxEl.querySelector('[data-story-bind="commentCount"]');
       const commentsListEl = lightboxEl.querySelector('[data-story-bind="commentsList"]');
       const commentsDrawerEl = lightboxEl.querySelector('[data-story-bind="commentsDrawer"]');
       const toggleCommentsBtn = lightboxEl.querySelector('[data-story-action="toggleComments"]');
@@ -189,6 +189,8 @@
         const story = stories[currentStoryIndex];
         if (titleEl) titleEl.textContent = story.title || "";
         if (likeCountEl) likeCountEl.textContent = String(story.likeCount || 0);
+        if (commentCountEl) commentCountEl.textContent = String(story.commentCount || 0);
+
 
         try {
           const { liked } = await window.Roos.storiesData.getLikeState(story.id);
@@ -303,6 +305,10 @@
         });
 
         commentsListEl.appendChild(frag);
+        if (commentCountEl) commentCountEl.textContent = String(comments.length);
+        const story = stories[currentStoryIndex];
+        if (story) story.commentCount = comments.length;
+
       }
 
       (function bindSwipeGestures() {
