@@ -192,8 +192,9 @@
       if (titleEl) titleEl.textContent = story.title || "";
 
       // Initial paint (may be stale for a split second)
-      if (likeCountEl) likeCountEl.textContent = String(story.likeCount || 0);
-      if (commentCountEl) commentCountEl.textContent = String(story.commentCount || 0);
+      if (likeCountEl) likeCountEl.textContent = "…";
+      if (commentCountEl) commentCountEl.textContent = "…";
+
 
       // ✅ Start server-truth subscription for counts (and anything else you want)
       try { unsubStoryMeta?.(); } catch (_) {}
@@ -336,11 +337,13 @@
         });
 
         commentsListEl.appendChild(frag);
-        if (commentCountEl) commentCountEl.textContent = String(comments.length);
-        const story = stories[currentStoryIndex];
-        if (story) story.commentCount = comments.length;
 
+        // ❌ REMOVE these lines (server controls commentCount now)
+        // if (commentCountEl) commentCountEl.textContent = String(comments.length);
+        // const story = stories[currentStoryIndex];
+        // if (story) story.commentCount = comments.length;
       }
+
 
       (function bindSwipeGestures() {
         if (!stageEl) return;
