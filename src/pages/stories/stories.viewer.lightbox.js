@@ -41,6 +41,8 @@
       let isPaused = false;
       let progressFills = []; // array of .story-progress-fill elements
       let unsubStoryMeta = null;
+      let likeInFlight = false;
+
 
 
       if (commentsDrawerEl) commentsDrawerEl.style.display = "";
@@ -124,25 +126,35 @@
 
       likeBtn?.addEventListener("click", async () => {
         if (currentStoryIndex < 0) return;
+        if (likeInFlight) return;           // 🚫 prevent double taps
+
         const story = stories[currentStoryIndex];
+        likeInFlight = true;
+
+        // Disable UI immediately
+        likeBtn.setAttribute("disabled", "true");
+        likeBtn.classList.add("is-loading");
 
         try {
           const res = await window.Roos.storiesData.toggleLike(story.id);
+
+          // Final state comes from server action result
           likeBtn.classList.toggle("is-liked", !!res.liked);
-          /* This is used for client side counting, we use Firebase for Server side
-          so we can remove it
-          const cur = Number(likeCountEl?.textContent || story.likeCount || 0);
-          const next = res.liked ? (cur + 1) : Math.max(0, cur - 1);
-          if (likeCountEl) likeCountEl.textContent = String(next);
-          story.likeCount = next;*/ 
+
         } catch (err) {
           if (String(err?.message || err) === "AUTH_REQUIRED") {
             console.warn("[Roos][Stories] Login required to like");
           } else {
             console.error("Like failed:", err);
           }
+        } finally {
+          // Always re-enable
+          likeInFlight = false;
+          likeBtn.removeAttribute("disabled");
+          likeBtn.classList.remove("is-loading");
         }
       });
+
 
       toggleCommentsBtn?.addEventListener("click", () => {
         if (!commentsDrawerEl) return;
