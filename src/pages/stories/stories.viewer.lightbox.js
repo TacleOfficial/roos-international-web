@@ -40,6 +40,8 @@
       let currentItemIndex = 0;
       let isPaused = false;
       let progressFills = []; // array of .story-progress-fill elements
+      let unsubStoryMeta = null;
+
 
       if (commentsDrawerEl) commentsDrawerEl.style.display = "";
 
@@ -127,11 +129,12 @@
         try {
           const res = await window.Roos.storiesData.toggleLike(story.id);
           likeBtn.classList.toggle("is-liked", !!res.liked);
-
+          /* This is used for client side counting, we use Firebase for Server side
+          so we can remove it
           const cur = Number(likeCountEl?.textContent || story.likeCount || 0);
           const next = res.liked ? (cur + 1) : Math.max(0, cur - 1);
           if (likeCountEl) likeCountEl.textContent = String(next);
-          story.likeCount = next;
+          story.likeCount = next;*/ 
         } catch (err) {
           if (String(err?.message || err) === "AUTH_REQUIRED") {
             console.warn("[Roos][Stories] Login required to like");
@@ -168,52 +171,77 @@
         }
       });
 
-      async function openStory(storyId) {
-        const idx = stories.findIndex(s => s.id === storyId);
-        if (idx === -1) return;
-        currentStoryIndex = idx;
+    async function openStory(storyId) {
+      const idx = stories.findIndex(s => s.id === storyId);
+      if (idx === -1) return;
+      currentStoryIndex = idx;
 
-        // ✅ mark viewed (local)
-        try { window.Roos?.storiesRail?.markViewed?.(storyId); } catch (_) {}
-        try { await window.Roos?.storiesData?.markViewed?.(storyId); } catch (_) {}
+      // ✅ mark viewed (local + server)
+      try { window.Roos?.storiesRail?.markViewed?.(storyId); } catch (_) {}
+      try { await window.Roos?.storiesData?.markViewed?.(storyId); } catch (_) {}
 
-        // re-render rail to apply is-viewed class immediately
-        // ✅ update this card immediately in the DOM so ring disappears now
-        try {
-          const card = document.querySelector(`[data-story="card"][data-story-id="${storyId}"]`);
-          if (card) card.classList.add("is-viewed");
-        } catch (_) {}
+      // ✅ update this card immediately so ring changes now
+      try {
+        const card = document.querySelector(`[data-story="card"][data-story-id="${storyId}"]`);
+        if (card) card.classList.add("is-viewed");
+      } catch (_) {}
 
+      const story = stories[currentStoryIndex];
 
+      // Title always safe
+      if (titleEl) titleEl.textContent = story.title || "";
 
-        const story = stories[currentStoryIndex];
-        if (titleEl) titleEl.textContent = story.title || "";
-        if (likeCountEl) likeCountEl.textContent = String(story.likeCount || 0);
-        if (commentCountEl) commentCountEl.textContent = String(story.commentCount || 0);
+      // Initial paint (may be stale for a split second)
+      if (likeCountEl) likeCountEl.textContent = String(story.likeCount || 0);
+      if (commentCountEl) commentCountEl.textContent = String(story.commentCount || 0);
 
+      // ✅ Start server-truth subscription for counts (and anything else you want)
+      try { unsubStoryMeta?.(); } catch (_) {}
+      unsubStoryMeta = null;
 
-        try {
-          const { liked } = await window.Roos.storiesData.getLikeState(story.id);
-          likeBtn?.classList.toggle("is-liked", !!liked);
-        } catch (_) {}
+      try {
+        unsubStoryMeta = window.Roos?.storiesData?.subToStoryMeta?.(storyId, {
+          onChange: (meta) => {
+            // Keep local cache in sync (helps if you reuse `stories[]` later)
+            if (currentStoryIndex >= 0 && stories[currentStoryIndex]?.id === storyId) {
+              stories[currentStoryIndex] = { ...stories[currentStoryIndex], ...meta };
+            }
 
-        currentItems = await window.Roos.storiesData.listStoryItems(story.id);
-        currentItemIndex = 0;
+            if (likeCountEl) likeCountEl.textContent = String(meta.likeCount || 0);
+            if (commentCountEl) commentCountEl.textContent = String(meta.commentCount || 0);
 
-        buildProgress(currentItems.length);
-        setProgressState(0, 0);
-
-        const hasMultiple = currentItems.length > 1;
-        if (prevItemBtn) prevItemBtn.style.display = hasMultiple ? "" : "none";
-        if (nextItemBtn) nextItemBtn.style.display = hasMultiple ? "" : "none";
-
-
-        show(lightboxEl);
-        document.body.style.overflow = "hidden";
-
-        await refreshComments(story.id);
-        playItem(0);
+            // Optional: if you add this later
+            // if (titleEl) titleEl.textContent = meta.title || stories[currentStoryIndex]?.title || "";
+          }
+        });
+      } catch (e) {
+        console.warn("[Roos][Stories] subToStoryMeta failed:", e);
       }
+
+      // Like state is per-user; keep as-is
+      try {
+        const { liked } = await window.Roos.storiesData.getLikeState(story.id);
+        likeBtn?.classList.toggle("is-liked", !!liked);
+      } catch (_) {}
+
+      // Load clips
+      currentItems = await window.Roos.storiesData.listStoryItems(story.id);
+      currentItemIndex = 0;
+
+      buildProgress(currentItems.length);
+      setProgressState(0, 0);
+
+      const hasMultiple = currentItems.length > 1;
+      if (prevItemBtn) prevItemBtn.style.display = hasMultiple ? "" : "none";
+      if (nextItemBtn) nextItemBtn.style.display = hasMultiple ? "" : "none";
+
+      show(lightboxEl);
+      document.body.style.overflow = "hidden";
+
+      await refreshComments(story.id);
+      playItem(0);
+    }
+
 
       function playItem(i) {
         if (!videoEl || !currentItems.length) return;
@@ -277,6 +305,9 @@
 
 
       function close() {
+        try { unsubStoryMeta?.(); } catch (_) {}
+        unsubStoryMeta = null;
+
         if (videoEl) {
           videoEl.pause();
           videoEl.removeAttribute("src");
@@ -284,11 +315,11 @@
         }
         hide(lightboxEl);
         document.body.style.overflow = "";
-        commentsDrawerEl?.classList.remove("is-open");
         currentItems = [];
         currentItemIndex = 0;
         currentStoryIndex = -1;
       }
+
 
       async function refreshComments(storyId) {
         if (!commentsListEl) return;

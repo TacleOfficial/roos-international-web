@@ -106,33 +106,52 @@
     return { liked: snap.exists() };
   }
 
-  async function toggleLike(storyId) {
-    const fb = assertMods();
-    const user = getUser();
-    if (!user) throw new Error("AUTH_REQUIRED");
+async function toggleLike(storyId) {
+  const fb = assertMods();
+  const user = getUser();
+  if (!user) throw new Error("AUTH_REQUIRED");
 
-    const {
-      doc, getDoc, setDoc, deleteDoc,
-      updateDoc, increment, serverTimestamp
-    } = fb.firestoreMod;
+  const { doc, getDoc, setDoc, deleteDoc, serverTimestamp } = fb.firestoreMod;
 
-    const likeRef = doc(fb.db, "stories", storyId, "likes", user.uid);
-    const storyRef = doc(fb.db, "stories", storyId);
+  const likeRef = doc(fb.db, "stories", storyId, "likes", user.uid);
 
-    const snap = await getDoc(likeRef);
-    const liked = snap.exists();
+  const snap = await getDoc(likeRef);
+  const liked = snap.exists();
 
-    if (liked) {
-      await deleteDoc(likeRef);
-      // best-effort count update (don’t fail if rules block it)
-      try { await updateDoc(storyRef, { likeCount: increment(-1) }); } catch (_) {}
-      return { liked: false };
-    } else {
-      await setDoc(likeRef, { createdAt: serverTimestamp() });
-      try { await updateDoc(storyRef, { likeCount: increment(1) }); } catch (_) {}
-      return { liked: true };
-    }
+  if (liked) {
+    await deleteDoc(likeRef);
+    return { liked: false };
+  } else {
+    await setDoc(likeRef, { createdAt: serverTimestamp() });
+    return { liked: true };
   }
+}
+
+
+    // ✅ Subscribe to story doc (server-truth counts)
+  function subToStoryMeta(storyId, { onChange }) {
+    const fb = assertMods();
+    const { doc, onSnapshot } = fb.firestoreMod;
+
+    const ref = doc(fb.db, "stories", storyId);
+
+    return onSnapshot(ref, (snap) => {
+      if (!snap.exists()) return;
+      onChange?.({ id: snap.id, ...snap.data() });
+    });
+  }
+
+  // ✅ One-time fetch (optional helper)
+  async function getStoryMeta(storyId) {
+    const fb = assertMods();
+    const { doc, getDoc } = fb.firestoreMod;
+
+    const ref = doc(fb.db, "stories", storyId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() };
+  }
+
 
   async function markViewed(storyId) {
     const fb = assertMods();
@@ -172,7 +191,9 @@
     getLikeState,
     toggleLike,
     markViewed,
-    listMyViewedStoryIds
+    listMyViewedStoryIds,
+    subToStoryMeta,   // ✅ add
+    getStoryMeta      // ✅ add
   };
 
   log("Loaded ✅");
