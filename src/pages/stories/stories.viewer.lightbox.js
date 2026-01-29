@@ -196,28 +196,32 @@
       if (commentCountEl) commentCountEl.textContent = "…";
 
 
-      // ✅ Start server-truth subscription for counts (and anything else you want)
+      // ✅ Start server-truth subscription for counts
       try { unsubStoryMeta?.(); } catch (_) {}
       unsubStoryMeta = null;
 
       try {
-        unsubStoryMeta = window.Roos?.storiesData?.subToStoryMeta?.(storyId, {
+        unsubStoryMeta = window.Roos.storiesData.subToStoryMeta(storyId, {
           onChange: (meta) => {
-            // Keep local cache in sync (helps if you reuse `stories[]` later)
+            console.log("[Roos][Stories][Meta]", storyId, meta);
+
+            // IMPORTANT: do not use || for numbers if you want to preserve 0
+            const likeCount = meta.likeCount ?? meta.likesCount ?? meta.likes ?? 0;
+            const commentCount = meta.commentCount ?? meta.commentsCount ?? meta.comments ?? 0;
+
+            if (likeCountEl) likeCountEl.textContent = String(likeCount);
+            if (commentCountEl) commentCountEl.textContent = String(commentCount);
+
+            // keep local cache in sync
             if (currentStoryIndex >= 0 && stories[currentStoryIndex]?.id === storyId) {
               stories[currentStoryIndex] = { ...stories[currentStoryIndex], ...meta };
             }
-
-            if (likeCountEl) likeCountEl.textContent = String(meta.likeCount || 0);
-            if (commentCountEl) commentCountEl.textContent = String(meta.commentCount || 0);
-
-            // Optional: if you add this later
-            // if (titleEl) titleEl.textContent = meta.title || stories[currentStoryIndex]?.title || "";
           }
         });
       } catch (e) {
         console.warn("[Roos][Stories] subToStoryMeta failed:", e);
       }
+
 
       // Like state is per-user; keep as-is
       try {
