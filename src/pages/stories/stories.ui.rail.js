@@ -104,7 +104,11 @@ function renderCard(templateEl, story) {
 
     card.addEventListener("mouseenter", start);
     card.addEventListener("mouseleave", stop);
-    card.addEventListener("click", stop); // prevent overlap when opening lightbox
+    card.addEventListener("click", (e) => {
+      stop();
+      // do NOT stop propagation — rail handler needs to open the story
+    });
+
   } else {
     if (wrap) wrap.style.display = "none";
     if (vid) vid.removeAttribute("src");
@@ -154,27 +158,39 @@ function renderCard(templateEl, story) {
         if (id) onOpenStory?.(id);
       });
 
-      async function setStories(stories) {
-        // remove old cards
-        railEl.querySelectorAll('[data-story="card"]').forEach(n => n.remove());
+      let renderToken = 0;
 
-        // ✅ pull server-viewed ids (if signed in) and merge into local viewed map
+      async function setStories(stories) {
+        const token = ++renderToken;
+
+        // 1) Fetch server-viewed ids BEFORE touching DOM (prevents double-render race)
         try {
           const ids = await window.Roos?.storiesData?.listMyViewedStoryIds?.(200);
+          if (token !== renderToken) return; // newer render started
+
           if (Array.isArray(ids) && ids.length) {
-            // merge into localStorage map so renderCard() sees them as viewed too
             const map = loadViewedMap();
             ids.forEach((id) => { map[id] = map[id] || Date.now(); });
             saveViewedMap(map);
           }
-        } catch (_) {}
+        } catch (_) {
+          if (token !== renderToken) return;
+        }
+
+        // 2) Now do a single synchronous DOM render
+        railEl.querySelectorAll('[data-story="card"]').forEach(n => n.remove());
 
         const frag = document.createDocumentFragment();
-        stories.forEach(story => frag.appendChild(renderCard(templateEl, story)));
+        stories.forEach((story) => {
+          // extra guard: never allow duplicates
+          if (railEl.querySelector(`[data-story="card"][data-story-id="${story.id}"]`)) return;
+          frag.appendChild(renderCard(templateEl, story));
+        });
         railEl.appendChild(frag);
 
         updateArrows(railEl, prevBtn, nextBtn);
       }
+
 
 
       window.Roos.storiesRail.markViewed = markStoryViewed;
