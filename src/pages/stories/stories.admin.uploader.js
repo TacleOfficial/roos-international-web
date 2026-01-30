@@ -28,13 +28,13 @@
     return json;
   }
 
-  async function putSigned(uploadUrl, blobOrFile, contentType) {
+  async function putSigned(uploadUrl, blobOrFile, contentType, token) {
     const res = await fetch(uploadUrl, {
       method: "PUT",
       headers: {
         "Content-Type": contentType,
-        // this header must match what the signed url expects (extensionHeaders were embedded in signing)
-        "x-goog-meta-firebaseStorageDownloadTokens": "1", // harmless; token is already baked into signature
+        // IMPORTANT: this must match what your signer expects
+        ...(token ? { "x-goog-meta-firebaseStorageDownloadTokens": token } : {}),
       },
       body: blobOrFile,
     });
@@ -42,7 +42,6 @@
   }
 
   async function grabCoverJpegFromVideoUrl(videoUrl) {
-    // Load the video, seek, draw to canvas
     const v = document.createElement("video");
     v.crossOrigin = "anonymous";
     v.muted = true;
@@ -54,10 +53,8 @@
       v.addEventListener("error", reject, { once: true });
     });
 
-    // pick a frame
     const t = Math.min(0.35, Math.max(0.1, (v.duration || 1) * 0.1));
     v.currentTime = t;
-
     await new Promise((resolve) => v.addEventListener("seeked", resolve, { once: true }));
 
     const canvas = document.createElement("canvas");
@@ -86,8 +83,17 @@
     const closeBtn = $('[data-stories-admin="close"]', modalWrap);
     const titleInput = $('[data-stories-admin="title"]', modalWrap);
     const publishAtInput = $('[data-stories-admin="publishAt"]', modalWrap);
+
     const filesInput = $('[data-stories-admin="files"]', modalWrap);
+
+    // ✅ NEW: optional “Upload clips” button (recommended)
+    const pickBtn = $('[data-stories-admin="pick"]', modalWrap);
+
     const recordBtn = $('[data-stories-admin="record"]', modalWrap);
+
+    // ✅ NEW: hidden iPhone-native capture input
+    const captureInput = $('[data-stories-admin="capture"]', modalWrap);
+
     const clipsEl = $('[data-stories-admin="clips"]', modalWrap);
     const saveBtn = $('[data-stories-admin="save"]', modalWrap);
     const publishBtn = $('[data-stories-admin="publish"]', modalWrap);
@@ -95,12 +101,32 @@
     let storyId = null;
     let clips = []; // { file, videoUrl, orderIndex, durationSec }
 
+    // recording state (desktop)
+    let rec = null;
+    let recStream = null;
+    let recChunks = [];
+    let recStopTimer = null;
+
     function show() { modalWrap.style.display = "block"; }
     function hide() { modalWrap.style.display = "none"; }
+
+    // ✅ Platform logic
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const supportsMediaRecorder = typeof window.MediaRecorder !== "undefined";
+    const useNativeCapture = isIOS || !supportsMediaRecorder;
+
+    function pushFilesToClips(files) {
+      const arr = Array.from(files || []);
+      arr.forEach((f) => {
+        clips.push({ file: f, videoUrl: null, orderIndex: null, durationSec: null });
+      });
+      renderClips();
+    }
 
     function renderClips() {
       if (!clipsEl) return;
       clipsEl.textContent = "";
+
       clips.forEach((c, i) => {
         const row = document.createElement("div");
         row.style.display = "flex";
@@ -109,7 +135,7 @@
         row.style.padding = "8px 0";
 
         const label = document.createElement("div");
-        label.textContent = `${i + 1}. ${c.file?.name || "Recorded clip"}`;
+        label.textContent = `${i + 1}. ${c.file?.name || "Clip"}`;
 
         const up = document.createElement("button");
         up.type = "button";
@@ -133,9 +159,19 @@
           renderClips();
         });
 
+        // ✅ NEW: remove clip
+        const del = document.createElement("button");
+        del.type = "button";
+        del.textContent = "✕";
+        del.addEventListener("click", () => {
+          clips.splice(i, 1);
+          renderClips();
+        });
+
         row.appendChild(label);
         row.appendChild(up);
         row.appendChild(down);
+        row.appendChild(del);
         clipsEl.appendChild(row);
       });
     }
@@ -157,33 +193,20 @@
 
     async function uploadAllClipsAndCreateItems() {
       const id = await ensureStoryDraft();
+      if (!clips.length) throw new Error("no_clips");
 
-      // upload in current order
       for (let i = 0; i < clips.length; i++) {
         const c = clips[i];
         const file = c.file;
         const contentType = file?.type || "video/mp4";
 
-        // sign upload
         const signed = await apiFetch(`/admin/stories/${id}/clips:signUpload`, {
           method: "POST",
           body: { contentType, filename: file?.name || "clip" },
         });
 
-        // PUT to signed URL
-        await fetch(signed.uploadUrl, {
-          method: "PUT",
-          headers: {
-            "Content-Type": contentType,
-            // must match what signer included (safe even if duplicated)
-            "x-goog-meta-firebaseStorageDownloadTokens": signed.token,
-          },
-          body: file,
-        }).then((r) => {
-          if (!r.ok) throw new Error(`clip_upload_failed_${r.status}`);
-        });
+        await putSigned(signed.uploadUrl, file, contentType, signed.token);
 
-        // create item doc (server-side)
         await apiFetch(`/admin/stories/${id}/items`, {
           method: "POST",
           body: {
@@ -197,7 +220,6 @@
         c.orderIndex = i;
       }
 
-      // cover from first clip
       if (clips[0]?.videoUrl) {
         const coverBlob = await grabCoverJpegFromVideoUrl(clips[0].videoUrl);
 
@@ -206,16 +228,7 @@
           body: {},
         });
 
-        await fetch(signedCover.uploadUrl, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "image/jpeg",
-            "x-goog-meta-firebaseStorageDownloadTokens": signedCover.token,
-          },
-          body: coverBlob,
-        }).then((r) => {
-          if (!r.ok) throw new Error(`cover_upload_failed_${r.status}`);
-        });
+        await putSigned(signedCover.uploadUrl, coverBlob, "image/jpeg", signedCover.token);
 
         await apiFetch(`/admin/stories/${id}/cover`, {
           method: "POST",
@@ -233,8 +246,7 @@
       await uploadAllClipsAndCreateItems();
 
       const title = (titleInput?.value || "").trim();
-      const publishAtRaw = publishAtInput?.value || ""; // datetime-local (no timezone)
-      // Convert datetime-local to ISO with local timezone assumption:
+      const publishAtRaw = publishAtInput?.value || "";
       const publishAtIso = publishAtRaw ? new Date(publishAtRaw).toISOString() : null;
 
       await apiFetch(`/admin/stories/${storyId}/publish`, {
@@ -244,48 +256,99 @@
 
       log("Published:", storyId);
       hide();
-      // reset modal state
+
       storyId = null;
       clips = [];
       if (filesInput) filesInput.value = "";
+      if (captureInput) captureInput.value = "";
       if (publishAtInput) publishAtInput.value = "";
       renderClips();
     }
 
-    openBtn.addEventListener("click", () => {
-      show();
-    });
+    // -------------------------
+    // ✅ Desktop recording
+    // -------------------------
+    async function startDesktopRecording() {
+      // If already recording, ignore
+      if (rec) return;
 
-    closeBtn?.addEventListener("click", () => {
-      hide();
-    });
+      // Safer default mime: pick first supported
+      const preferred = [
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm",
+      ];
+      const mimeType = preferred.find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || "";
+
+      recStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      recChunks = [];
+
+      rec = new MediaRecorder(recStream, mimeType ? { mimeType } : undefined);
+      rec.ondataavailable = (e) => { if (e.data?.size) recChunks.push(e.data); };
+
+      rec.onstop = () => {
+        try { recStream?.getTracks()?.forEach((t) => t.stop()); } catch (_) {}
+        recStream = null;
+
+        const blob = new Blob(recChunks, { type: rec.mimeType || "video/webm" });
+        const ext = (rec.mimeType || "").includes("webm") ? "webm" : "webm";
+        const file = new File([blob], `recorded-${Date.now()}.${ext}`, { type: blob.type });
+
+        clips.push({ file, videoUrl: null, orderIndex: null, durationSec: null });
+        renderClips();
+
+        rec = null;
+        recChunks = [];
+        if (recStopTimer) clearTimeout(recStopTimer);
+        recStopTimer = null;
+      };
+
+      rec.start();
+
+      // stop after 10s for now
+      recStopTimer = setTimeout(() => {
+        try { rec?.stop(); } catch (_) {}
+      }, 10_000);
+    }
+
+    // -------------------------
+    // Wire up UI
+    // -------------------------
+    openBtn.addEventListener("click", () => show());
+    closeBtn?.addEventListener("click", () => hide());
+
+    // ✅ Upload clips button (recommended)
+    pickBtn?.addEventListener("click", () => filesInput?.click());
 
     filesInput?.addEventListener("change", () => {
-      const files = Array.from(filesInput.files || []);
-      files.forEach((f) => clips.push({ file: f, videoUrl: null, orderIndex: null, durationSec: null }));
+      pushFilesToClips(filesInput.files);
+      filesInput.value = "";
+    });
+
+    // ✅ iPhone capture returned file
+    captureInput?.addEventListener("change", () => {
+      const file = (captureInput.files && captureInput.files[0]) || null;
+      if (!file) return;
+      clips.push({ file, videoUrl: null, orderIndex: null, durationSec: null });
+      captureInput.value = "";
       renderClips();
     });
 
-    // Simple recording (optional)
+    // ✅ Record button decides path
     recordBtn?.addEventListener("click", async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        const chunks = [];
-        const rec = new MediaRecorder(stream, { mimeType: "video/webm" });
+        if (useNativeCapture) {
+          // iPhone: open native camera UI
+          if (!captureInput) {
+            console.warn("[Roos][Stories][Admin] Missing capture input. Add data-stories-admin='capture'");
+            return;
+          }
+          captureInput.click();
+          return;
+        }
 
-        rec.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
-
-        rec.onstop = () => {
-          stream.getTracks().forEach((t) => t.stop());
-          const blob = new Blob(chunks, { type: "video/webm" });
-          const file = new File([blob], `recorded-${Date.now()}.webm`, { type: "video/webm" });
-          clips.push({ file, videoUrl: null, orderIndex: null, durationSec: null });
-          renderClips();
-        };
-
-        rec.start();
-        // stop after 10s for now (you can build a real UI later)
-        setTimeout(() => rec.stop(), 10_000);
+        // Desktop: MediaRecorder
+        await startDesktopRecording();
       } catch (e) {
         console.error("record failed", e);
       }
@@ -304,13 +367,12 @@
     });
 
     renderClips();
-    log("Admin uploader ready ✅");
+    log("Admin uploader ready ✅", { useNativeCapture, isIOS, supportsMediaRecorder });
   }
 
-    if (document.readyState === "loading") {
+  if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initAdminUploader, { once: true });
-    } else {
+  } else {
     initAdminUploader();
-    }
-
+  }
 })();
