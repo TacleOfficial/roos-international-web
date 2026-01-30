@@ -42,6 +42,8 @@
       let progressFills = []; // array of .story-progress-fill elements
       let unsubStoryMeta = null;
       let likeInFlight = false;
+      let commentInFlight = false;
+
 
 
 
@@ -170,28 +172,44 @@
     commentForm?.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (currentStoryIndex < 0) return;
-      const story = stories[currentStoryIndex];
+      if (commentInFlight) return; // 🚫 prevent double submit
 
+      const story = stories[currentStoryIndex];
       const text = (commentInput?.value || "").trim();
       if (!text) return;
 
+      commentInFlight = true;
+
+      // Disable UI immediately
+      const submitBtn = commentForm.querySelector('button[type="submit"]');
+      submitBtn?.setAttribute("disabled", "true");
+      submitBtn?.classList.add("is-loading");
+      commentInput?.setAttribute("disabled", "true");
+
       try {
-        const res = await window.Roos.storiesData.addComment(story.id, text);
+        await window.Roos.storiesData.addComment(story.id, text);
+
+        // Clear input only after success
         if (commentInput) commentInput.value = "";
 
-        // Optional immediate UI paint (server already returned truth)
-        if (commentCountEl) commentCountEl.textContent = String(res.commentCount);
-
-        // Refresh list UI
+        // Let server-truth counters update via Firestore listener
         await refreshComments(story.id);
+
       } catch (err) {
         if (String(err?.message || err) === "AUTH_REQUIRED") {
           console.warn("[Roos][Stories] Login required to comment");
         } else {
           console.error("Comment failed:", err);
         }
+      } finally {
+        // Always re-enable
+        commentInFlight = false;
+        submitBtn?.removeAttribute("disabled");
+        submitBtn?.classList.remove("is-loading");
+        commentInput?.removeAttribute("disabled");
       }
     });
+
 
 
     async function openStory(storyId) {
