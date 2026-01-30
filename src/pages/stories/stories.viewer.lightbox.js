@@ -137,9 +137,9 @@
 
         try {
           const res = await window.Roos.storiesData.toggleLike(story.id);
-
-          // Final state comes from server action result
           likeBtn.classList.toggle("is-liked", !!res.liked);
+          if (likeCountEl) likeCountEl.textContent = String(res.likeCount);
+
 
         } catch (err) {
           if (String(err?.message || err) === "AUTH_REQUIRED") {
@@ -167,26 +167,32 @@
 
 
 
-      commentForm?.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        if (currentStoryIndex < 0) return;
-        const story = stories[currentStoryIndex];
+    commentForm?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (currentStoryIndex < 0) return;
+      const story = stories[currentStoryIndex];
 
-        const text = (commentInput?.value || "").trim();
-        if (!text) return;
+      const text = (commentInput?.value || "").trim();
+      if (!text) return;
 
-        try {
-          await window.Roos.storiesData.addComment(story.id, text);
-          if (commentInput) commentInput.value = "";
-          await refreshComments(story.id);
-        } catch (err) {
-          if (String(err?.message || err) === "AUTH_REQUIRED") {
-            console.warn("[Roos][Stories] Login required to comment");
-          } else {
-            console.error("Comment failed:", err);
-          }
+      try {
+        const res = await window.Roos.storiesData.addComment(story.id, text);
+        if (commentInput) commentInput.value = "";
+
+        // Optional immediate UI paint (server already returned truth)
+        if (commentCountEl) commentCountEl.textContent = String(res.commentCount);
+
+        // Refresh list UI
+        await refreshComments(story.id);
+      } catch (err) {
+        if (String(err?.message || err) === "AUTH_REQUIRED") {
+          console.warn("[Roos][Stories] Login required to comment");
+        } else {
+          console.error("Comment failed:", err);
         }
-      });
+      }
+    });
+
 
     async function openStory(storyId) {
       const idx = stories.findIndex(s => s.id === storyId);

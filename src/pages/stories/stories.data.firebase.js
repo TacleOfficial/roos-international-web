@@ -75,24 +75,37 @@
   }
 
   async function addComment(storyId, text) {
-    const fb = assertMods();
     const user = getUser();
     if (!user) throw new Error("AUTH_REQUIRED");
 
-    const { collection, addDoc, serverTimestamp } = fb.firestoreMod;
+    const token = await user.getIdToken(true);
+    const API_BASE = window.Roos?.env?.API_BASE || "https://api-v5ojxajk4a-uc.a.run.app";
 
     const clean = String(text || "").trim();
     if (!clean) throw new Error("EMPTY_COMMENT");
 
-    const base = collection(fb.db, "stories", storyId, "comments");
-    const ref = await addDoc(base, {
-      uid: user.uid,
-      text: clean,
-      createdAt: serverTimestamp(),
+    const resp = await fetch(`${API_BASE}/stories/${encodeURIComponent(storyId)}/comments`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ text: clean }),
     });
 
-    return ref.id;
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      if (resp.status === 401) throw new Error("AUTH_REQUIRED");
+      throw new Error(data?.error || "ADD_COMMENT_FAILED");
+    }
+
+    // server truth
+    return {
+      commentId: data.commentId,
+      commentCount: Number(data.commentCount || 0),
+    };
   }
+
 
   async function getLikeState(storyId) {
     const fb = assertMods();
@@ -106,26 +119,35 @@
     return { liked: snap.exists() };
   }
 
-async function toggleLike(storyId) {
-  const fb = assertMods();
-  const user = getUser();
-  if (!user) throw new Error("AUTH_REQUIRED");
+  async function toggleLike(storyId) {
+    const fb = assertMods();
+    const user = getUser();
+    if (!user) throw new Error("AUTH_REQUIRED");
 
-  const { doc, getDoc, setDoc, deleteDoc, serverTimestamp } = fb.firestoreMod;
+    const token = await user.getIdToken(true);
 
-  const likeRef = doc(fb.db, "stories", storyId, "likes", user.uid);
+    // You already have this from deploy output:
+    // https://api-v5ojxajk4a-uc.a.run.app
+    const API_BASE = window.Roos?.env?.API_BASE || "https://api-v5ojxajk4a-uc.a.run.app";
 
-  const snap = await getDoc(likeRef);
-  const liked = snap.exists();
+    const resp = await fetch(`${API_BASE}/stories/${encodeURIComponent(storyId)}/toggle-like`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+    });
 
-  if (liked) {
-    await deleteDoc(likeRef);
-    return { liked: false };
-  } else {
-    await setDoc(likeRef, { createdAt: serverTimestamp() });
-    return { liked: true };
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      if (resp.status === 401) throw new Error("AUTH_REQUIRED");
+      throw new Error(data?.error || "TOGGLE_LIKE_FAILED");
+    }
+
+    // server-truth
+    return { liked: !!data.liked, likeCount: Number(data.likeCount || 0) };
   }
-}
+
 
 
     // ✅ Subscribe to story doc (server-truth counts)
