@@ -164,7 +164,7 @@
         const isOpen = commentsDrawerEl.classList.toggle("is-open");
 
         // Force visibility regardless of Webflow inline styles
-        commentsDrawerEl.style.display = isOpen ? "block" : "none";
+        commentsDrawerEl.style.display = isOpen ? "flex" : "none";
       });
 
 
