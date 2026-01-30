@@ -98,6 +98,11 @@
     const saveBtn = $('[data-stories-admin="save"]', modalWrap);
     const publishBtn = $('[data-stories-admin="publish"]', modalWrap);
 
+    const statusEl = $('[data-stories-admin="status"]', modalWrap);
+    const progressWrap = $('[data-stories-admin="progressWrap"]', modalWrap);
+    const progressBar = $('[data-stories-admin="progressBar"]', modalWrap);
+    const progressText = $('[data-stories-admin="progressText"]', modalWrap);
+
     let storyId = null;
     let clips = []; // { file, videoUrl, orderIndex, durationSec }
 
@@ -121,6 +126,28 @@
         clips.push({ file: f, videoUrl: null, orderIndex: null, durationSec: null });
       });
       renderClips();
+    }
+
+    function setStatus(msg, type = "info") {
+      if (!statusEl) return;
+      statusEl.style.display = msg ? "block" : "none";
+      statusEl.textContent = msg || "";
+      statusEl.setAttribute("data-state", type); // style via [data-state="error"]
+    }
+
+    function setProgress(pct, label) {
+      if (!progressWrap || !progressBar) return;
+      const v = Math.max(0, Math.min(100, Number(pct || 0)));
+      progressWrap.style.display = "block";
+      progressBar.style.width = `${v}%`;
+      if (progressText) progressText.textContent = label ? `${label} (${v}%)` : `${v}%`;
+    }
+
+    function clearProgress() {
+      if (!progressWrap || !progressBar) return;
+      progressWrap.style.display = "none";
+      progressBar.style.width = "0%";
+      if (progressText) progressText.textContent = "";
     }
 
     function renderClips() {
@@ -191,51 +218,90 @@
       return storyId;
     }
 
-    async function uploadAllClipsAndCreateItems() {
-      const id = await ensureStoryDraft();
-      if (!clips.length) throw new Error("no_clips");
+async function uploadAllClipsAndCreateItems() {
+  try {
+    setStatus("", "info");
+    setProgress(1, "Preparing draft");
 
-      for (let i = 0; i < clips.length; i++) {
-        const c = clips[i];
-        const file = c.file;
-        const contentType = file?.type || "video/mp4";
+    const id = await ensureStoryDraft();
+    if (!clips.length) throw new Error("no_clips");
 
-        const signed = await apiFetch(`/admin/stories/${id}/clips:signUpload`, {
-          method: "POST",
-          body: { contentType, filename: file?.name || "clip" },
-        });
+    const totalSteps = clips.length * 3 + 3; 
+    // per clip: sign + upload + createItem, plus cover sign+upload+save
+    let step = 0;
+    const bump = (label) => {
+      step += 1;
+      const pct = Math.round((step / totalSteps) * 100);
+      setProgress(pct, label);
+    };
 
-        await putSigned(signed.uploadUrl, file, contentType, signed.token);
+    for (let i = 0; i < clips.length; i++) {
+      const c = clips[i];
+      const file = c.file;
+      const contentType = file?.type || "video/mp4";
 
-        await apiFetch(`/admin/stories/${id}/items`, {
-          method: "POST",
-          body: {
-            videoUrl: signed.videoUrl,
-            orderIndex: i,
-            durationSec: null,
-          },
-        });
+      bump(`Signing clip ${i + 1}/${clips.length}`);
+      const signed = await apiFetch(`/admin/stories/${id}/clips:signUpload`, {
+        method: "POST",
+        body: { contentType, filename: file?.name || "clip" },
+      });
 
-        c.videoUrl = signed.videoUrl;
-        c.orderIndex = i;
-      }
+      bump(`Uploading clip ${i + 1}/${clips.length}`);
+      await putSigned(signed.uploadUrl, file, contentType, signed.token);
 
-      if (clips[0]?.videoUrl) {
-        const coverBlob = await grabCoverJpegFromVideoUrl(clips[0].videoUrl);
+      bump(`Saving clip ${i + 1}/${clips.length}`);
+      await apiFetch(`/admin/stories/${id}/items`, {
+        method: "POST",
+        body: { videoUrl: signed.videoUrl, orderIndex: i, durationSec: null },
+      });
 
-        const signedCover = await apiFetch(`/admin/stories/${id}/cover:signUpload`, {
-          method: "POST",
-          body: {},
-        });
-
-        await putSigned(signedCover.uploadUrl, coverBlob, "image/jpeg", signedCover.token);
-
-        await apiFetch(`/admin/stories/${id}/cover`, {
-          method: "POST",
-          body: { coverUrl: signedCover.coverUrl },
-        });
-      }
+      c.videoUrl = signed.videoUrl;
+      c.orderIndex = i;
     }
+
+    // cover from first clip
+    if (clips[0]?.videoUrl) {
+      bump("Generating cover image");
+      const coverBlob = await grabCoverJpegFromVideoUrl(clips[0].videoUrl);
+
+      bump("Signing cover upload");
+      const signedCover = await apiFetch(`/admin/stories/${id}/cover:signUpload`, {
+        method: "POST",
+        body: {},
+      });
+
+      bump("Uploading cover");
+      await putSigned(signedCover.uploadUrl, coverBlob, "image/jpeg", signedCover.token);
+
+      bump("Saving cover");
+      await apiFetch(`/admin/stories/${id}/cover`, {
+        method: "POST",
+        body: { coverUrl: signedCover.coverUrl },
+      });
+    }
+
+    setProgress(100, "Done");
+    setStatus("Uploads complete ✅", "success");
+  } catch (err) {
+    // Make errors human-readable
+    const msg = String(err?.message || err);
+
+    if (msg === "AUTH_REQUIRED") setStatus("Please log in again and retry.", "error");
+    else if (msg === "title_required") setStatus("Title is required.", "error");
+    else if (msg === "no_clips") setStatus("Add at least one clip before saving/publishing.", "error");
+    else if (msg.startsWith("upload_failed_") || msg.startsWith("clip_upload_failed_")) {
+      setStatus("Upload failed. Check your network / CORS and retry.", "error");
+    } else if (msg.startsWith("http_")) {
+      setStatus(`Server error (${msg}). Open console + Network tab for details.`, "error");
+    } else {
+      setStatus(`Error: ${msg}`, "error");
+    }
+
+    console.error("[Stories Admin] uploadAllClipsAndCreateItems failed:", err);
+    throw err;
+  }
+}
+
 
     async function saveDraft() {
       await uploadAllClipsAndCreateItems();
@@ -356,14 +422,28 @@
 
     saveBtn?.addEventListener("click", async () => {
       saveBtn.disabled = true;
-      try { await saveDraft(); }
-      finally { saveBtn.disabled = false; }
+      publishBtn && (publishBtn.disabled = true);
+      try {
+        await saveDraft();
+      } finally {
+        saveBtn.disabled = false;
+        publishBtn && (publishBtn.disabled = false);
+        // keep progress visible if you want; otherwise:
+        // clearProgress();
+      }
     });
 
     publishBtn?.addEventListener("click", async () => {
       publishBtn.disabled = true;
-      try { await publish(); }
-      finally { publishBtn.disabled = false; }
+      saveBtn && (saveBtn.disabled = true);
+      try {
+        await publish();
+        clearProgress();
+        setStatus("", "info");
+      } finally {
+        publishBtn.disabled = false;
+        saveBtn && (saveBtn.disabled = false);
+      }
     });
 
     renderClips();
