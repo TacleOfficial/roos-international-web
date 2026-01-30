@@ -6,6 +6,12 @@
     return !!document.querySelector('[data-stories="rail"]');
   }
 
+  // Only load admin uploader if the admin UI exists on the page
+  function hasAdminUploaderDom() {
+    return !!document.querySelector('[data-stories-admin-modal="wrap"]')
+        || !!document.querySelector('[data-stories-admin="open"]');
+  }
+
   function loadFromStories(path) {
     return new Promise((resolve, reject) => {
       const ENV = window.Roos?._env || "dev";
@@ -39,6 +45,11 @@
       await loadFromStories("stories.data.firebase.js");
       await loadFromStories("stories.ui.rail.js");
       await loadFromStories("stories.viewer.lightbox.js");
+
+      // ✅ Load admin uploader only when its DOM exists (no cost on public pages)
+      if (hasAdminUploaderDom()) {
+        await loadFromStories("stories.admin.uploader.js");
+      }
 
       if (!window.Roos?.stories?.init) {
         console.warn("[Roos][Stories] stories.init not found");
