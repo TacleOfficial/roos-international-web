@@ -435,7 +435,7 @@
       const publishAtRaw = publishAtInput?.value || "";
       const publishAtIso = publishAtRaw ? new Date(publishAtRaw).toISOString() : null;
 
-    await apiFetch(`/admin/stories/${id}/items`, {
+    await apiFetch(`/admin/stories/${storyId}/items`, {
       method: "POST",
       body: {
         videoUrl: signed.videoUrl,
