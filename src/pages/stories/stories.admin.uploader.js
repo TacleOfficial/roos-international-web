@@ -28,6 +28,47 @@
     return json;
   }
 
+  function putSignedXHR(uploadUrl, blobOrFile, contentType, token, { onProgress } = {}) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", uploadUrl, true);
+
+      xhr.setRequestHeader("Content-Type", contentType);
+      if (token) xhr.setRequestHeader("x-goog-meta-firebaseStorageDownloadTokens", token);
+
+      let lastLoaded = 0;
+
+      xhr.upload.onprogress = (evt) => {
+        // iOS/Safari sometimes has lengthComputable=false — still track loaded deltas
+        const loaded = evt.loaded || 0;
+        const total = evt.total || (blobOrFile?.size || 0);
+
+        const delta = Math.max(0, loaded - lastLoaded);
+        lastLoaded = loaded;
+
+        onProgress?.({
+          loaded,
+          total,
+          delta,
+          lengthComputable: !!evt.lengthComputable,
+        });
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`upload_failed_${xhr.status}`));
+      };
+
+      xhr.onerror = () => reject(new Error("upload_network_error"));
+      xhr.onabort = () => reject(new Error("upload_aborted"));
+
+      xhr.send(blobOrFile);
+    });
+  }
+
+
+
+
   async function putSigned(uploadUrl, blobOrFile, contentType, token) {
     const res = await fetch(uploadUrl, {
       method: "PUT",
@@ -135,6 +176,15 @@
       statusEl.setAttribute("data-state", type); // style via [data-state="error"]
     }
 
+    function bytesToMB(b) {
+      return (b / (1024 * 1024)).toFixed(1);
+    }
+
+    function calcTotalBytesForClips(clipsArr) {
+      return clipsArr.reduce((sum, c) => sum + (c?.file?.size || 0), 0);
+    }
+
+
     function setProgress(pct, label) {
       if (!progressWrap || !progressBar) return;
       const v = Math.max(0, Math.min(100, Number(pct || 0)));
@@ -142,6 +192,17 @@
       progressBar.style.width = `${v}%`;
       if (progressText) progressText.textContent = label ? `${label} (${v}%)` : `${v}%`;
     }
+
+    function setProcessing(isOn, msg = "Processing…") {
+      if (isOn) {
+        setProgress(100, msg);
+        if (progressWrap) progressWrap.setAttribute("data-state", "processing");
+        setStatus(msg, "info");
+      } else {
+        if (progressWrap) progressWrap.removeAttribute("data-state");
+      }
+    }
+
 
     function clearProgress() {
       if (!progressWrap || !progressBar) return;
@@ -218,89 +279,148 @@
       return storyId;
     }
 
-async function uploadAllClipsAndCreateItems() {
-  try {
-    setStatus("", "info");
-    setProgress(1, "Preparing draft");
+    async function uploadAllClipsAndCreateItems() {
+      try {
+        setStatus("", "info");
+        clearProgress();
 
-    const id = await ensureStoryDraft();
-    if (!clips.length) throw new Error("no_clips");
+        const id = await ensureStoryDraft();
+        if (!clips.length) throw new Error("no_clips");
 
-    const totalSteps = clips.length * 3 + 3; 
-    // per clip: sign + upload + createItem, plus cover sign+upload+save
-    let step = 0;
-    const bump = (label) => {
-      step += 1;
-      const pct = Math.round((step / totalSteps) * 100);
-      setProgress(pct, label);
-    };
+        // --- Overall progress tracking ---
+        let uploadedBytes = 0;
 
-    for (let i = 0; i < clips.length; i++) {
-      const c = clips[i];
-      const file = c.file;
-      const contentType = file?.type || "video/mp4";
+        // Total bytes = sum of all clip sizes (cover added later once we generate it)
+        let totalBytes = calcTotalBytesForClips(clips);
 
-      bump(`Signing clip ${i + 1}/${clips.length}`);
-      const signed = await apiFetch(`/admin/stories/${id}/clips:signUpload`, {
-        method: "POST",
-        body: { contentType, filename: file?.name || "clip" },
-      });
+        const renderOverall = (label) => {
+          const pct = totalBytes > 0 ? Math.round((uploadedBytes / totalBytes) * 100) : 0;
+          const safePct = Math.max(0, Math.min(100, pct));
+          setProgress(safePct, `${label} — ${bytesToMB(uploadedBytes)} / ${bytesToMB(totalBytes)} MB`);
+        };
 
-      bump(`Uploading clip ${i + 1}/${clips.length}`);
-      await putSigned(signed.uploadUrl, file, contentType, signed.token);
+        setStatus("Preparing uploads…", "info");
+        renderOverall("Starting");
 
-      bump(`Saving clip ${i + 1}/${clips.length}`);
-      await apiFetch(`/admin/stories/${id}/items`, {
-        method: "POST",
-        body: { videoUrl: signed.videoUrl, orderIndex: i, durationSec: null },
-      });
+        // upload in current order
+        for (let i = 0; i < clips.length; i++) {
+          const c = clips[i];
+          const file = c.file;
+          const contentType = file?.type || "video/mp4";
 
-      c.videoUrl = signed.videoUrl;
-      c.orderIndex = i;
+          setStatus(`Signing clip ${i + 1}/${clips.length}…`, "info");
+          const signed = await apiFetch(`/admin/stories/${id}/clips:signUpload`, {
+            method: "POST",
+            body: { contentType, filename: file?.name || "clip" },
+          });
+
+          setStatus(`Uploading clip ${i + 1}/${clips.length}…`, "info");
+
+          // Track overall bytes while this file uploads
+          let fileUploadedSoFar = 0;
+
+          await putSignedXHR(signed.uploadUrl, file, contentType, signed.token, {
+            onProgress: ({ delta }) => {
+              // delta = bytes since last progress event
+              if (!delta) return;
+              uploadedBytes += delta;
+              fileUploadedSoFar += delta;
+              renderOverall(`Uploading clip ${i + 1}/${clips.length}`);
+            },
+          });
+
+          // After upload finishes, ensure we didn't undershoot (Safari oddities)
+          const size = file?.size || 0;
+          if (fileUploadedSoFar < size) {
+            const catchUp = size - fileUploadedSoFar;
+            uploadedBytes += catchUp;
+            renderOverall(`Finalizing clip ${i + 1}/${clips.length}`);
+          }
+
+          setStatus(`Saving clip ${i + 1}/${clips.length}…`, "info");
+          await apiFetch(`/admin/stories/${id}/items`, {
+            method: "POST",
+            body: {
+              videoUrl: signed.videoUrl,
+              orderIndex: i,
+              durationSec: null,
+            },
+          });
+
+          c.videoUrl = signed.videoUrl;
+          c.orderIndex = i;
+        }
+
+        // cover from first clip (adds bytes to totalBytes once generated)
+        if (clips[0]?.videoUrl) {
+          setStatus("Generating cover…", "info");
+          const coverBlob = await grabCoverJpegFromVideoUrl(clips[0].videoUrl);
+
+          // Add cover size into total so progress doesn't jump backward
+          const coverSize = coverBlob?.size || 0;
+          totalBytes += coverSize;
+          renderOverall("Cover queued");
+
+          setStatus("Signing cover upload…", "info");
+          const signedCover = await apiFetch(`/admin/stories/${id}/cover:signUpload`, {
+            method: "POST",
+            body: {},
+          });
+
+          setStatus("Uploading cover…", "info");
+
+          let coverUploadedSoFar = 0;
+
+          await putSignedXHR(signedCover.uploadUrl, coverBlob, "image/jpeg", signedCover.token, {
+            onProgress: ({ delta }) => {
+              if (!delta) return;
+              uploadedBytes += delta;
+              coverUploadedSoFar += delta;
+              renderOverall("Uploading cover");
+            },
+          });
+
+          setProcessing(true, "Processing…");
+
+          if (coverUploadedSoFar < coverSize) {
+            uploadedBytes += (coverSize - coverUploadedSoFar);
+            renderOverall("Finalizing cover");
+          }
+
+          setStatus("Saving cover…", "info");
+          await apiFetch(`/admin/stories/${id}/cover`, {
+            method: "POST",
+            body: { coverUrl: signedCover.coverUrl },
+          });
+        }
+
+        // Final
+        uploadedBytes = totalBytes; // clamp to 100%
+        renderOverall("Done");
+        setStatus("Uploads complete ✅", "success");
+        setProgress(100, "Done");
+        setProcessing(false);
+
+      } catch (err) {
+        setProcessing(false);
+        const msg = String(err?.message || err);
+
+        if (msg === "AUTH_REQUIRED") setStatus("Please log in again and retry.", "error");
+        else if (msg === "title_required") setStatus("Title is required.", "error");
+        else if (msg === "no_clips") setStatus("Add at least one clip before saving/publishing.", "error");
+        else if (msg.startsWith("upload_failed_") || msg === "upload_network_error") {
+          setStatus("Upload failed. Check your network and retry.", "error");
+        } else if (msg.startsWith("http_")) {
+          setStatus(`Server error (${msg}). Check console + Network tab.`, "error");
+        } else {
+          setStatus(`Error: ${msg}`, "error");
+        }
+
+        console.error("[Stories Admin] uploadAllClipsAndCreateItems failed:", err);
+        throw err;
+      }
     }
 
-    // cover from first clip
-    if (clips[0]?.videoUrl) {
-      bump("Generating cover image");
-      const coverBlob = await grabCoverJpegFromVideoUrl(clips[0].videoUrl);
-
-      bump("Signing cover upload");
-      const signedCover = await apiFetch(`/admin/stories/${id}/cover:signUpload`, {
-        method: "POST",
-        body: {},
-      });
-
-      bump("Uploading cover");
-      await putSigned(signedCover.uploadUrl, coverBlob, "image/jpeg", signedCover.token);
-
-      bump("Saving cover");
-      await apiFetch(`/admin/stories/${id}/cover`, {
-        method: "POST",
-        body: { coverUrl: signedCover.coverUrl },
-      });
-    }
-
-    setProgress(100, "Done");
-    setStatus("Uploads complete ✅", "success");
-  } catch (err) {
-    // Make errors human-readable
-    const msg = String(err?.message || err);
-
-    if (msg === "AUTH_REQUIRED") setStatus("Please log in again and retry.", "error");
-    else if (msg === "title_required") setStatus("Title is required.", "error");
-    else if (msg === "no_clips") setStatus("Add at least one clip before saving/publishing.", "error");
-    else if (msg.startsWith("upload_failed_") || msg.startsWith("clip_upload_failed_")) {
-      setStatus("Upload failed. Check your network / CORS and retry.", "error");
-    } else if (msg.startsWith("http_")) {
-      setStatus(`Server error (${msg}). Open console + Network tab for details.`, "error");
-    } else {
-      setStatus(`Error: ${msg}`, "error");
-    }
-
-    console.error("[Stories Admin] uploadAllClipsAndCreateItems failed:", err);
-    throw err;
-  }
-}
 
 
     async function saveDraft() {
