@@ -342,6 +342,7 @@
             method: "POST",
             body: {
               videoUrl: signed.videoUrl,
+              previewUrl: null,          // ✅ server will generate & backfill later
               orderIndex: i,
               durationSec: null,
             },
@@ -435,16 +436,10 @@
       const publishAtRaw = publishAtInput?.value || "";
       const publishAtIso = publishAtRaw ? new Date(publishAtRaw).toISOString() : null;
 
-    await apiFetch(`/admin/stories/${storyId}/items`, {
-      method: "POST",
-      body: {
-        videoUrl: signed.videoUrl,
-        previewUrl: null,          // ✅ server will fill later
-        orderIndex: i,
-        durationSec: null,
-      },
-    });
-
+      await apiFetch(`/admin/stories/${storyId}/publish`, {
+        method: "POST",
+        body: { title, publishAt: publishAtIso },
+      });
 
       log("Published:", storyId);
       hide();
