@@ -435,10 +435,16 @@
       const publishAtRaw = publishAtInput?.value || "";
       const publishAtIso = publishAtRaw ? new Date(publishAtRaw).toISOString() : null;
 
-      await apiFetch(`/admin/stories/${storyId}/publish`, {
-        method: "POST",
-        body: { title, publishAt: publishAtIso },
-      });
+    await apiFetch(`/admin/stories/${id}/items`, {
+      method: "POST",
+      body: {
+        videoUrl: signed.videoUrl,
+        previewUrl: null,          // ✅ server will fill later
+        orderIndex: i,
+        durationSec: null,
+      },
+    });
+
 
       log("Published:", storyId);
       hide();
