@@ -2,37 +2,49 @@
 (function () {
   const log = (...a) => console.log("[Roos][Catalog][DB]", ...a);
 
-  function db() {
-    const dbi = window.Roos?.firebase?.db; // <-- your firebase.js sets this
+  function mustGetFirestore() {
+    const dbi = window.Roos?.firebase?.db;
     if (!dbi) throw new Error("FIRESTORE_NOT_READY");
     return dbi;
   }
 
-
-  function vendorsRef() { return db().collection("vendors"); }
-  function collectionsRef() { return db().collection("collections"); }
-  function productsRef() { return db().collection("products"); }
+  function fs() {
+    const fsMod = window.Roos?.firebase?.firestoreMod;
+    if (!fsMod) throw new Error("FIRESTORE_MOD_NOT_READY");
+    return fsMod;
+  }
 
   // ----------------------------
   // Vendors
   // ----------------------------
   async function listVendorsByCategory(categorySlug, limit = 250) {
-    // requires vendors.categorySlugs: []
-    const snap = await vendorsRef()
-      .where("categorySlugs", "array-contains", categorySlug)
-      .orderBy("nameLower")
-      .limit(limit)
-      .get();
+    const db = mustGetFirestore();
+    const {
+      collection, query, where, orderBy, limit: qLimit, getDocs
+    } = fs();
 
+    const q = query(
+      collection(db, "vendors"),
+      where("categorySlugs", "array-contains", categorySlug),
+      orderBy("nameLower"),
+      qLimit(limit)
+    );
+
+    const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   }
 
-  // Optional fallback (if you want to show vendors even without category mapping)
   async function listAllVendors(limit = 500) {
-    const snap = await vendorsRef()
-      .orderBy("nameLower")
-      .limit(limit)
-      .get();
+    const db = mustGetFirestore();
+    const { collection, query, orderBy, limit: qLimit, getDocs } = fs();
+
+    const q = query(
+      collection(db, "vendors"),
+      orderBy("nameLower"),
+      qLimit(limit)
+    );
+
+    const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   }
 
@@ -40,12 +52,17 @@
   // Collections
   // ----------------------------
   async function listCollectionsByVendorSlug(vendorSlug, limit = 500) {
-    const snap = await collectionsRef()
-      .where("vendorSlug", "==", vendorSlug)
-      .orderBy("nameLower")
-      .limit(limit)
-      .get();
+    const db = mustGetFirestore();
+    const { collection, query, where, orderBy, limit: qLimit, getDocs } = fs();
 
+    const q = query(
+      collection(db, "collections"),
+      where("vendorSlug", "==", vendorSlug),
+      orderBy("nameLower"),
+      qLimit(limit)
+    );
+
+    const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   }
 
@@ -54,17 +71,27 @@
   // ----------------------------
   async function listProductsByCollectionSlugPaged(collectionSlug, {
     pageSize = 24,
-    cursor = null // Firestore doc snapshot
+    cursor = null // DocumentSnapshot
   } = {}) {
-    let q = productsRef()
-      .where("collectionSlug", "==", collectionSlug)
-      .where("isActive", "==", true)
-      .orderBy("nameLower")
-      .limit(pageSize);
+    const db = mustGetFirestore();
+    const {
+      collection, query, where, orderBy, limit: qLimit, getDocs, startAfter
+    } = fs();
 
-    if (cursor) q = q.startAfter(cursor);
+    const parts = [
+      collection(db, "products"),
+      where("collectionSlug", "==", collectionSlug),
+      where("isActive", "==", true),
+      orderBy("nameLower"),
+      qLimit(pageSize)
+    ];
 
-    const snap = await q.get();
+    // cursor is a DocumentSnapshot (last doc from previous page)
+    const q = cursor
+      ? query(...parts, startAfter(cursor))
+      : query(...parts);
+
+    const snap = await getDocs(q);
     const docs = snap.docs;
 
     return {
@@ -78,23 +105,31 @@
   // Product detail
   // ----------------------------
   async function getProductById(productId) {
-    const doc = await productsRef().doc(productId).get();
-    if (!doc.exists) return null;
-    return { id: doc.id, ...doc.data() };
+    const db = mustGetFirestore();
+    const { doc, getDoc } = fs();
+
+    const ref = doc(db, "products", productId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() };
   }
 
   async function listVariants(productId, limit = 300) {
-    const snap = await productsRef()
-      .doc(productId)
-      .collection("variants")
-      .where("discontinued", "==", false)
-      .orderBy("slug")
-      .limit(limit)
-      .get();
+    const db = mustGetFirestore();
+    const { collection, query, where, orderBy, limit: qLimit, getDocs } = fs();
 
+    const q = query(
+      collection(db, "products", productId, "variants"),
+      where("discontinued", "==", false),
+      orderBy("slug"),
+      qLimit(limit)
+    );
+
+    const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   }
 
+  // Expose
   window.Roos = window.Roos || {};
   window.Roos.catalog = window.Roos.catalog || {};
   window.Roos.catalog.db = {
