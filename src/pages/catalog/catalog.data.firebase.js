@@ -3,10 +3,11 @@
   const log = (...a) => console.log("[Roos][Catalog][DB]", ...a);
 
   function db() {
-    const fs = window.Roos?.firebase?.firestore;
-    if (!fs) throw new Error("FIRESTORE_NOT_READY");
-    return fs;
+    const dbi = window.Roos?.firebase?.db; // <-- your firebase.js sets this
+    if (!dbi) throw new Error("FIRESTORE_NOT_READY");
+    return dbi;
   }
+
 
   function vendorsRef() { return db().collection("vendors"); }
   function collectionsRef() { return db().collection("collections"); }
