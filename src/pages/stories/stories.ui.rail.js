@@ -74,13 +74,17 @@ function renderCard(templateEl, story) {
   // hover preview
   const wrap = card.querySelector('[data-story-bind="previewWrap"]');
   const vid  = card.querySelector('video[data-story-bind="previewVideo"]');
-  const previewUrl = story.previewUrl || "";
+  // Prefer story.previewUrl (future: real preview file), otherwise fallback to first clip URL (we'll set it server-side)
+  const previewUrl = story.previewUrl || story.firstVideoUrl || "";
+
 
   const canHover = window.matchMedia &&
     window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 
   if (canHover && wrap && vid && previewUrl) {
     wrap.style.display = "none";
+    const hoverUrl = previewUrl ? (previewUrl.includes("#") ? previewUrl : `${previewUrl}#t=0.1`) : "";
+    vid.src = hoverUrl;
     vid.src = previewUrl;
     vid.muted = true;
     vid.loop = true;
