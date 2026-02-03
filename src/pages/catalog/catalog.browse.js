@@ -180,19 +180,23 @@
         cursor: state.cursor
       });
 
+      console.log("[Roos][Catalog] products page:", {
+        count: items.length,
+        first: items[0] ? {
+          id: items[0].id,
+          name: items[0].name,
+          media: items[0].media,
+          hero: items[0].media?.hero,
+          firstImage: items[0].media?.images?.[0],
+        } : null
+      });
+
+
     // Optional: update count display incrementally
     if (resultsCount) {
       const current = gridWrap.children.length;
       resultsCount.textContent = `(${current + items.length}${hasMore ? "+" : ""})`;
     }
-
-    console.log("[Roos][Catalog] product media check:", {
-      id: p.id,
-      name: p.name,
-      media: p.media,
-      hero: p.media?.hero,
-      firstImage: p.media?.images?.[0],
-    });
 
 
     items.forEach(p => {
