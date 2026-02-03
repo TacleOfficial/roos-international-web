@@ -26,7 +26,8 @@
     const vendor = await db.getVendorBySlug(vendorSlug);
     if (vendor) {
       setText(state.root, state.selectors.vendorTitle, vendor.name);
-      setText(state.root, state.selectors.vendorSub, vendor.website || "");
+      setText(state.root, state.selectors.vendorSub, vendor.tagline || "");
+      setText(state.root, state.selectors.vendorWeb, vendor.website || "");
 
       const hero = vendor.media?.hero || vendor.media?.thumb || "";
       const logo = vendor.media?.logo || "";
