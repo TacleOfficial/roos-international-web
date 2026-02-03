@@ -48,22 +48,30 @@
 
     // If hero is video and we have a video element
     if (hero.type === "video" && hero.src && videoEl) {
-      // Prefer poster for fast paint
+      videoEl.muted = true;           // enforce
+      videoEl.autoplay = true;
+      videoEl.loop = true;
+      videoEl.playsInline = true;
+
+      videoEl.src = hero.src;
       if (hero.poster) videoEl.poster = hero.poster;
 
-      // Set src (works for simple MP4 URLs)
-      // If you use multiple sources later, we can append <source> tags.
-      videoEl.src = hero.src;
-
-      // Show video, hide image
       videoEl.style.display = "";
       if (imgEl) imgEl.style.display = "none";
 
-      // Best-effort play (some browsers block; muted+playsinline should allow)
-      const p = videoEl.play?.();
-      if (p && typeof p.catch === "function") p.catch(() => {});
+      requestAnimationFrame(() => {
+        const playPromise = videoEl.play();
+        if (playPromise?.catch) {
+          playPromise.catch(() => {
+            // Autoplay blocked → keep poster visible
+            videoEl.pause();
+          });
+        }
+      });
+
       return;
     }
+
 
     // Otherwise render as image (or fallback)
     const imgSrc = hero.src || "https://placehold.co/1600x900?text=Vendor+Hero";
