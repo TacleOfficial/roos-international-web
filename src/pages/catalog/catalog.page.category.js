@@ -32,11 +32,18 @@
       const card = cloneTemplate(state.selectors.tplVendorCard, state.root);
       setText(card, '[data-bind="name"]', v.name);
 
-      // go to vendor page (separate page)
-      card.href = `/vendor?slug=${encodeURIComponent(v.slug)}&cat=${encodeURIComponent(slug)}`;
+      const thumb =
+        v.media?.thumb ||
+        v.media?.hero ||
+        v.media?.logo ||
+        "https://placehold.co/600x400?text=Vendor";
 
+      ui.setImg(card, 'img[data-bind="thumb"]', thumb, v.name);
+
+      card.href = `/vendor?slug=${encodeURIComponent(v.slug)}&cat=${encodeURIComponent(slug)}`;
       wrap.appendChild(card);
     });
+
 
     log("Initialized ✅", { category: slug, vendors: vendors.length });
   }

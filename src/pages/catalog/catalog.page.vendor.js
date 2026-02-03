@@ -27,7 +27,14 @@
     if (vendor) {
       setText(state.root, state.selectors.vendorTitle, vendor.name);
       setText(state.root, state.selectors.vendorSub, vendor.website || "");
+
+      const hero = vendor.media?.hero || vendor.media?.thumb || "";
+      const logo = vendor.media?.logo || "";
+
+      if (hero) ui.setImg(state.root, 'img[data-bind="vendorHero"]', hero, vendor.name);
+      if (logo) ui.setImg(state.root, 'img[data-bind="vendorLogo"]', logo, vendor.name + " logo");
     }
+
 
     const wrap = ui.$(state.selectors.collectionList, state.root);
     clear(wrap);
