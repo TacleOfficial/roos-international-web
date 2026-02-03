@@ -4,13 +4,13 @@
 
   function has(sel) { return !!document.querySelector(sel); }
 
-  // Page types (DOM sniff)
   const SEL = {
-    browse: '[data-page="catalog-browse"]',        // /products
-    category: '[data-page="catalog-category"]',    // /laminates-veneers etc
-    vendor: '[data-page="catalog-vendor"]',        // /vendor
-    collection: '[data-page="catalog-collection"]' // /collection
-    // item: '[data-page="catalog-item"]'          // /item later
+    browse: '[data-page="catalog-browse"]',            // /products
+    category: '[data-page="catalog-category"]',        // /laminates-veneers etc
+    vendor: '[data-page="catalog-vendor"]',            // /vendor (old route)
+    collection: '[data-page="catalog-collection"]',    // /collection (old route)
+    vendorCollections: '[data-vendor-collections="wrap"]' // /vendors/<slug> landing pages
+    // item: '[data-page="catalog-item"]'              // /item later
   };
 
   function loadFromCatalog(path) {
@@ -36,8 +36,14 @@
   }
 
   async function init() {
-    // Only run if any catalog page exists
-    if (!has(SEL.browse) && !has(SEL.category) && !has(SEL.vendor) && !has(SEL.collection)) return;
+    // ✅ IMPORTANT: include vendorCollections so vendor landing pages run
+    if (
+      !has(SEL.browse) &&
+      !has(SEL.category) &&
+      !has(SEL.vendor) &&
+      !has(SEL.collection) &&
+      !has(SEL.vendorCollections)
+    ) return;
 
     window.Roos = window.Roos || {};
     if (window.Roos._catalogLoaded) return;
@@ -48,13 +54,15 @@
       await loadFromCatalog("catalog.data.firebase.js");
       await loadFromCatalog("catalog.ui.js");
 
-      // Page-specific
+      // Load only what the page needs
       if (has(SEL.browse)) await loadFromCatalog("catalog.browse.js");
       if (has(SEL.category)) await loadFromCatalog("catalog.page.category.js");
       if (has(SEL.vendor)) await loadFromCatalog("catalog.page.vendor.js");
       if (has(SEL.collection)) await loadFromCatalog("catalog.page.collection.js");
+      if (has(SEL.vendorCollections)) await loadFromCatalog("catalog.vendor.collections.widget.js");
 
-      // Init whichever page exists (one per page)
+      // ---- INIT (after scripts are loaded) ----
+
       if (has(SEL.browse) && window.Roos?.catalog?.browse?.init) {
         window.Roos.catalog.browse.init({
           root: document,
@@ -87,12 +95,18 @@
         log("Category page initialized ✅");
       }
 
+      if (has(SEL.vendorCollections) && window.Roos?.catalog?.vendorCollections?.init) {
+        window.Roos.catalog.vendorCollections.init({ root: document });
+        log("Vendor collections widget initialized ✅");
+      }
+
       if (has(SEL.vendor) && window.Roos?.catalog?.vendorPage?.init) {
         window.Roos.catalog.vendorPage.init({
           root: document,
           selectors: {
             vendorTitle: '[data-bind="vendorTitle"]',
             vendorSub: '[data-bind="vendorSub"]',
+            vendorWeb: '[data-bind="vendorWeb"]', // ✅ add this
             collectionList: '[data-catalog="collectionList"]',
             tplCollectionCard: '[data-tpl="collectionCard"]'
           }
