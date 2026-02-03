@@ -11,6 +11,76 @@
     };
   }
 
+  // Supports both:
+  // vendor.media.hero = "https://.../hero.jpg"  (legacy string)
+  // vendor.media.hero = { type:"video"|"image", src:"...", poster:"..." } (new standard)
+  function normalizeHero(vendor) {
+    const m = vendor?.media || {};
+    const hero = m.hero;
+
+    // New object format
+    if (hero && typeof hero === "object") {
+      return {
+        type: hero.type || "image",
+        src: hero.src || "",
+        poster: hero.poster || ""
+      };
+    }
+
+    // Legacy string format (treat as image)
+    if (typeof hero === "string" && hero) {
+      return { type: "image", src: hero, poster: "" };
+    }
+
+    // Fallback to thumb, then logo
+    const fallback = m.thumb || m.logo || "";
+    return { type: "image", src: fallback, poster: "" };
+  }
+
+  function renderVendorHero({ ui, root, vendor }) {
+    const hero = normalizeHero(vendor);
+
+    // You should have BOTH on the page:
+    // <video data-bind="vendorHeroVideo" ...></video>
+    // <img data-bind="vendorHeroImage" ... />
+    const videoEl = root.querySelector('[data-bind="vendorHeroVideo"]');
+    const imgEl = root.querySelector('img[data-bind="vendorHeroImage"]');
+
+    // If hero is video and we have a video element
+    if (hero.type === "video" && hero.src && videoEl) {
+      // Prefer poster for fast paint
+      if (hero.poster) videoEl.poster = hero.poster;
+
+      // Set src (works for simple MP4 URLs)
+      // If you use multiple sources later, we can append <source> tags.
+      videoEl.src = hero.src;
+
+      // Show video, hide image
+      videoEl.style.display = "";
+      if (imgEl) imgEl.style.display = "none";
+
+      // Best-effort play (some browsers block; muted+playsinline should allow)
+      const p = videoEl.play?.();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+      return;
+    }
+
+    // Otherwise render as image (or fallback)
+    const imgSrc = hero.src || "https://placehold.co/1600x900?text=Vendor+Hero";
+    if (imgEl) {
+      // show image, hide video
+      imgEl.style.display = "";
+      if (videoEl) videoEl.style.display = "none";
+
+      // Use your UI helper (supports passing a root node too)
+      ui.setImg(imgEl, null, imgSrc, vendor?.name || "");
+    } else {
+      // Backward compat: if you still have old markup <img data-bind="vendorHero">
+      ui.setImg(root, 'img[data-bind="vendorHero"]', imgSrc, vendor?.name || "");
+      if (videoEl) videoEl.style.display = "none";
+    }
+  }
+
   async function init(opts) {
     state.root = opts?.root || document;
     state.selectors = opts?.selectors || {};
@@ -29,13 +99,12 @@
       setText(state.root, state.selectors.vendorSub, vendor.tagline || "");
       setText(state.root, state.selectors.vendorWeb, vendor.website || "");
 
-      const hero = vendor.media?.hero || vendor.media?.thumb || "";
       const logo = vendor.media?.logo || "";
-
-      if (hero) ui.setImg(state.root, 'img[data-bind="vendorHero"]', hero, vendor.name);
       if (logo) ui.setImg(state.root, 'img[data-bind="vendorLogo"]', logo, vendor.name + " logo");
-    }
 
+      // ✅ NEW: hero supports video OR image
+      renderVendorHero({ ui, root: state.root, vendor });
+    }
 
     const wrap = ui.$(state.selectors.collectionList, state.root);
     clear(wrap);
