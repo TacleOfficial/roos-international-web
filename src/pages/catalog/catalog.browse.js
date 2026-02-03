@@ -186,6 +186,15 @@
       resultsCount.textContent = `(${current + items.length}${hasMore ? "+" : ""})`;
     }
 
+    console.log("[Roos][Catalog] product media check:", {
+      id: p.id,
+      name: p.name,
+      media: p.media,
+      hero: p.media?.hero,
+      firstImage: p.media?.images?.[0],
+    });
+
+
     items.forEach(p => {
       const card = cloneTemplate(state.selectors.tplProductCard, state.root);
 
