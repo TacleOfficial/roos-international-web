@@ -101,6 +101,39 @@
     };
   }
 
+
+  async function getVendorBySlug(vendorSlug) {
+    const db = mustGetFirestore();
+    const { collection, query, where, limit: qLimit, getDocs } = fs();
+
+    const q = query(
+      collection(db, "vendors"),
+      where("slug", "==", vendorSlug),
+      qLimit(1)
+    );
+
+    const snap = await getDocs(q);
+    const d = snap.docs[0];
+    return d ? { id: d.id, ...d.data() } : null;
+  }
+
+  async function getCollectionBySlug(vendorSlug, collectionSlug) {
+    const db = mustGetFirestore();
+    const { collection, query, where, limit: qLimit, getDocs } = fs();
+
+    // safest: filter by BOTH vendorSlug and slug
+    const q = query(
+      collection(db, "collections"),
+      where("vendorSlug", "==", vendorSlug),
+      where("slug", "==", collectionSlug),
+      qLimit(1)
+    );
+
+    const snap = await getDocs(q);
+    const d = snap.docs[0];
+    return d ? { id: d.id, ...d.data() } : null;
+  }
+
   // ----------------------------
   // Product detail
   // ----------------------------
@@ -139,6 +172,8 @@
     listProductsByCollectionSlugPaged,
     getProductById,
     listVariants,
+    getVendorBySlug,
+    getCollectionBySlug
   };
 
   log("Ready ✅");

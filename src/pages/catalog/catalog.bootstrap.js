@@ -2,20 +2,16 @@
 (function () {
   const log = (...a) => console.log("[Roos][Catalog][Boot]", ...a);
 
-  // Page exists if either browse DOM or item DOM exists
-  function hasDom() {
-    return hasBrowseDom() || hasItemDom();
-  }
+  function has(sel) { return !!document.querySelector(sel); }
 
-  function hasBrowseDom() {
-    return !!document.querySelector('[data-catalog="productGrid"]')
-        || !!document.querySelector('[data-catalog="categoryBar"]');
-  }
-
-  function hasItemDom() {
-    return !!document.querySelector('[data-item="title"]')
-        || !!document.querySelector('[data-item="hero"]');
-  }
+  // Page types (DOM sniff)
+  const SEL = {
+    browse: '[data-page="catalog-browse"]',        // /products
+    category: '[data-page="catalog-category"]',    // /laminates-veneers etc
+    vendor: '[data-page="catalog-vendor"]',        // /vendor
+    collection: '[data-page="catalog-collection"]' // /collection
+    // item: '[data-page="catalog-item"]'          // /item later
+  };
 
   function loadFromCatalog(path) {
     return new Promise((resolve, reject) => {
@@ -40,87 +36,83 @@
   }
 
   async function init() {
-    if (!hasDom()) return;
+    // Only run if any catalog page exists
+    if (!has(SEL.browse) && !has(SEL.category) && !has(SEL.vendor) && !has(SEL.collection)) return;
 
     window.Roos = window.Roos || {};
     if (window.Roos._catalogLoaded) return;
     window.Roos._catalogLoaded = true;
 
     try {
-      // Always load data + UI helpers
+      // Shared layers
       await loadFromCatalog("catalog.data.firebase.js");
       await loadFromCatalog("catalog.ui.js");
 
-      // Conditionally load controller(s)
-      if (hasBrowseDom()) {
-        await loadFromCatalog("catalog.browse.js");
+      // Page-specific
+      if (has(SEL.browse)) await loadFromCatalog("catalog.browse.js");
+      if (has(SEL.category)) await loadFromCatalog("catalog.page.category.js");
+      if (has(SEL.vendor)) await loadFromCatalog("catalog.page.vendor.js");
+      if (has(SEL.collection)) await loadFromCatalog("catalog.page.collection.js");
+
+      // Init whichever page exists (one per page)
+      if (has(SEL.browse) && window.Roos?.catalog?.browse?.init) {
+        window.Roos.catalog.browse.init({
+          root: document,
+          selectors: {
+            categoryBar: '[data-catalog="categoryBar"]',
+            vendorList: '[data-catalog="vendorList"]',
+            collectionList: '[data-catalog="collectionList"]',
+            productGrid: '[data-catalog="productGrid"]',
+            loadMore: '[data-catalog="loadMore"]',
+            resultsCount: '[data-catalog="resultsCount"]',
+            crumbs: '[data-catalog="crumbs"]',
+            searchInput: '[data-catalog="searchInput"]',
+            tplCategory: '[data-tpl="category"]',
+            tplVendor: '[data-tpl="vendor"]',
+            tplCollection: '[data-tpl="collection"]',
+            tplProductCard: '[data-tpl="productCard"]'
+          }
+        });
+        log("Browse initialized ✅");
       }
 
-      if (hasItemDom()) {
-        await loadFromCatalog("catalog.item.js");
+      if (has(SEL.category) && window.Roos?.catalog?.categoryPage?.init) {
+        window.Roos.catalog.categoryPage.init({
+          root: document,
+          selectors: {
+            vendorList: '[data-catalog="vendorList"]',
+            tplVendorCard: '[data-tpl="vendorCard"]'
+          }
+        });
+        log("Category page initialized ✅");
       }
 
-      // Init browse
-      if (hasBrowseDom()) {
-        if (!window.Roos?.catalog?.browse?.init) {
-          console.warn("[Roos][Catalog] catalog.browse.init not found");
-        } else {
-          window.Roos.catalog.browse.init({
-            root: document,
-            selectors: {
-              categoryBar: '[data-catalog="categoryBar"]',
-              vendorList: '[data-catalog="vendorList"]',
-              collectionList: '[data-catalog="collectionList"]',
-              productGrid: '[data-catalog="productGrid"]',
-              loadMore: '[data-catalog="loadMore"]',
-              resultsCount: '[data-catalog="resultsCount"]',
-              crumbs: '[data-catalog="crumbs"]',
-
-              // Templates
-              tplCategory: '[data-tpl="category"]',
-              tplVendor: '[data-tpl="vendor"]',
-              tplCollection: '[data-tpl="collection"]',
-              tplProductCard: '[data-tpl="productCard"]',
-            }
-          });
-
-          log("Browse initialized ✅");
-        }
+      if (has(SEL.vendor) && window.Roos?.catalog?.vendorPage?.init) {
+        window.Roos.catalog.vendorPage.init({
+          root: document,
+          selectors: {
+            vendorTitle: '[data-bind="vendorTitle"]',
+            vendorSub: '[data-bind="vendorSub"]',
+            collectionList: '[data-catalog="collectionList"]',
+            tplCollectionCard: '[data-tpl="collectionCard"]'
+          }
+        });
+        log("Vendor page initialized ✅");
       }
 
-      // Init item
-      if (hasItemDom()) {
-        if (!window.Roos?.catalog?.item?.init) {
-          console.warn("[Roos][Catalog] catalog.item.init not found");
-        } else {
-          window.Roos.catalog.item.init({
-            root: document,
-            selectors: {
-              title: '[data-item="title"]',
-              subTitle: '[data-item="subTitle"]',
-              hero: '[data-item="hero"]',
-              chips: '[data-item="chips"]',
-              specs: '[data-item="specs"]',
-              gallery: '[data-item="gallery"]',
-              docs: '[data-item="docs"]',
-              inspoGrid: '[data-item="inspoGrid"]',
-
-              // Templates
-              tplSpecRow: '[data-tpl="specRow"]',
-              tplGalleryImg: '[data-tpl="galleryImg"]',
-              tplDocLink: '[data-tpl="docLink"]',
-              tplInspoImg: '[data-tpl="inspoImg"]',
-
-              // Actions
-              requestSample: '[data-item="requestSample"]',
-              requestQuote: '[data-item="requestQuote"]',
-              favorite: '[data-item="favorite"]',
-              addToJob: '[data-item="addToJob"]',
-            }
-          });
-
-          log("Item initialized ✅");
-        }
+      if (has(SEL.collection) && window.Roos?.catalog?.collectionPage?.init) {
+        window.Roos.catalog.collectionPage.init({
+          root: document,
+          selectors: {
+            title: '[data-bind="collectionTitle"]',
+            desc: '[data-bind="collectionDesc"]',
+            hero: 'img[data-bind="collectionHero"]',
+            browseBtn: '[data-action="browseProducts"]',
+            previewGrid: '[data-catalog="previewGrid"]',
+            tplPreviewCard: '[data-tpl="previewCard"]'
+          }
+        });
+        log("Collection page initialized ✅");
       }
 
     } catch (err) {
@@ -128,7 +120,7 @@
     }
   }
 
-  // Wait for firebase (same as stories)
+  // wait for firebase
   if (window.Roos?.firebase?._initialized) init();
   else window.addEventListener("roos:firebase-ready", init, { once: true });
 })();
